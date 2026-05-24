@@ -8,8 +8,8 @@ SDL_FLAGS :: sdl.INIT_EVERYTHING
 WINDOW_TITLE :: "ABX!"
 WINDOW_FLAGS :: sdl.WINDOW_SHOWN
 RENDERER_FLAGS :: sdl.RENDERER_ACCELERATED | sdl.RENDERER_PRESENTVSYNC
-SCREEN_WIDTH :: 640
-SCREEN_HEIGHT :: 360
+SCREEN_WIDTH :: 1280
+SCREEN_HEIGHT :: 720
 MAX_WAVES :: 10
 
 Game :: struct {
@@ -80,6 +80,7 @@ render_world :: proc(world: ^World, renderer: ^sdl.Renderer) {
 			h = i32(world.player.height),
 		}
 		sdl.RenderDrawRect(renderer, &player)
+		sdl.RenderFillRect(renderer, &player)
 	}
 }
 
@@ -122,10 +123,17 @@ main :: proc() {
 
 	for running {
 		current_time := sdl.GetTicks()
-		delta_time := (current_time - last_time) / 1000.0
+		delta_time := f32(current_time - last_time) / 1000.0
 		last_time = current_time
+
 		world_handle_events(&world, &event, &running)
 		keystate := sdl.GetKeyboardState(nil)
-
+		/* 
+     * Player Update will eventually be merged into a game update
+     * that will handle players, enemies, and level updates
+     */
+		player_update(&world.player, keystate, delta_time)
+		render_world(&world, game.renderer)
+		sdl.RenderPresent(game.renderer)
 	}
 }
