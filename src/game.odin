@@ -26,6 +26,7 @@ Game :: struct {
 World :: struct {
 	player: Player,
 	assets: Assets,
+	state: GameState
 }
 
 Assets :: struct {
@@ -75,7 +76,12 @@ initialize_sdl :: proc(g: ^Game) -> bool {
 
 world_init :: proc(world: ^World, renderer: ^sdl.Renderer) {
 	assets_init(&world.assets, renderer)
+	world.state = STATE_MENU
 	world.player = player_init(SCREEN_WIDTH, SCREEN_HEIGHT)
+
+	for i in 0..<WEAPON_COUNT {
+		world.bullets[i].active = false
+	}
 }
 
 assets_init :: proc(asset: ^Assets, renderer: ^sdl.Renderer){
