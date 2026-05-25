@@ -25,7 +25,7 @@ Game :: struct {
 
 World :: struct {
 	player: Player,
-	asset: Assets,
+	assets: Assets,
 }
 
 Assets :: struct {
@@ -74,14 +74,15 @@ initialize_sdl :: proc(g: ^Game) -> bool {
 }
 
 world_init :: proc(world: ^World, renderer: ^sdl.Renderer) {
+	assets_init(&world.assets, renderer)
 	world.player = player_create(SCREEN_WIDTH, SCREEN_HEIGHT)
 }
 
 assets_init :: proc(asset: ^Assets, renderer: ^sdl.Renderer){
-	for i := 0; i < len(WeaponType); i += 1 {
-		def := get_weapon_def(i);
-		a.ships[i] = texture_load(renderer, def.ship_texture_path)
-		a.bullets[i] = texture_load(renderer, def.bullet_texture_path)
+	for kind in WeaponType {
+		def := get_weapon_def(kind);
+		assets.ships[kind] = texture_load(renderer, def.ship_texture_path)
+		assets.bullets[kind] = texture_load(renderer, def.bullet_texture_path)
 	}
 }
 
@@ -155,6 +156,10 @@ assets_destroy :: proc(assets: ^Assets) {
 	}
 }
 
+world_cleanup :: proc(world: ^World){
+	assets_destroy(&world.assets)
+}
+
 game_cleanup :: proc(g: ^Game) {
 	if g != nil {
 		if g.renderer != nil do sdl.DestroyRenderer(g.renderer)
@@ -171,6 +176,7 @@ main :: proc() {
 	game: Game
 
 	defer {
+		world_cleanup(&world)
 		game_cleanup(&game)
 		os.exit(exit_status)
 	}
