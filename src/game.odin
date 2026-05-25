@@ -75,7 +75,7 @@ initialize_sdl :: proc(g: ^Game) -> bool {
 
 world_init :: proc(world: ^World, renderer: ^sdl.Renderer) {
 	assets_init(&world.assets, renderer)
-	world.player = player_create(SCREEN_WIDTH, SCREEN_HEIGHT)
+	world.player = player_init(SCREEN_WIDTH, SCREEN_HEIGHT)
 }
 
 assets_init :: proc(asset: ^Assets, renderer: ^sdl.Renderer){

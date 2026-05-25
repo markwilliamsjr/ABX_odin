@@ -7,6 +7,7 @@ Player :: struct {
 	x, y, speed:                                                  f32,
 	width, height, hb_offset_x, hb_offset_y, hb_width, hb_height: int,
 	active:                                                       bool,
+	current_ammo: WeaponType
 }
 
 WeaponType :: enum {
@@ -21,6 +22,13 @@ WeaponDefinition :: struct {
 	ship_texture_path: string,
 	damage_effective, damage_neutral, damage_ineffective, width, height: int,
 	speed: f32
+}
+
+Bullet :: struct {
+	x, y, speed: f32,
+	width, height: int,
+	active: bool,
+	weapon_type: WeaponType
 }
 
 // ---- Definitions / Tables ----
@@ -41,7 +49,7 @@ WEAPON_DEFS := [WeaponType]WeaponDefinition{
 
 // ---- Init ----
 
-player_create :: proc(screen_width: int, screen_height: int) -> Player {
+player_init :: proc(screen_width: int, screen_height: int) -> Player {
 	p := Player {
 		width     = 64,
 		height    = 128,
@@ -49,6 +57,7 @@ player_create :: proc(screen_width: int, screen_height: int) -> Player {
 		hb_height = 65,
 		speed     = 300,
 		active    = true,
+		current_ammo = .Neutral
 	}
 	p.x = (f32(screen_width) / 2) - (f32(p.width) / 2)
 	p.y = f32(screen_height - p.height - 20)
@@ -56,6 +65,20 @@ player_create :: proc(screen_width: int, screen_height: int) -> Player {
 	p.hb_offset_y = (p.height - p.hb_height) / 2 + 10
 
 	return p
+}
+
+bullet_init :: proc(player: ^Player) -> Bullet {
+	def := get_weapon_def(player.current_ammo)
+	b := Bullet {
+		width = def.width,
+		height = def.height,
+		speed = def.speed,
+		active = true,
+		weapon_type = player.current_ammo,
+	}
+	b.x = player.x + (f32(player.width) / 2.0) - (f32(b.width) / 2.0)
+	b.y = player.y
+	return b
 }
 
 // ---- Update ----
@@ -72,6 +95,13 @@ player_update :: proc(p: ^Player, keystate: [^]u8, delta_time: f32) {
 	}
 	if (p.x + f32(p.width) > SCREEN_WIDTH) {
 		p.x = f32(SCREEN_WIDTH) - f32(p.width)
+	}
+}
+
+bullet_update :: proc(b: ^Bullet, deltaTime: f32) {
+	b.y -= b.speed * delta_time
+	if (b.y + b.height < 0) {
+		b.active = false
 	}
 }
 
