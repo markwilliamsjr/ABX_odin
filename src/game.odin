@@ -153,6 +153,10 @@ assets_destroy :: proc(assets: ^Assets) {
 			sdl.DestroyTexture(assets.ships[kind])
 			assets.ships[kind] = nil
 		}
+		if assets.bullets[kind] != nil {
+			sdl.DestroyTexture(assets.bullets[kind])
+			assets.bullets[kind] = nil
+		}
 	}
 }
 
