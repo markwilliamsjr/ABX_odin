@@ -3,6 +3,9 @@ package main
 import "core:fmt"
 import "core:os"
 import sdl "vendor:sdl2"
+import sdl_image "vendor:sdl2/image"
+
+// ---- Consants ----
 
 SDL_FLAGS :: sdl.INIT_EVERYTHING
 WINDOW_TITLE :: "ABX!"
@@ -10,7 +13,10 @@ WINDOW_FLAGS :: sdl.WINDOW_SHOWN
 RENDERER_FLAGS :: sdl.RENDERER_ACCELERATED | sdl.RENDERER_PRESENTVSYNC
 SCREEN_WIDTH :: 1280
 SCREEN_HEIGHT :: 720
+WEAPON_COUNT :: 50
 MAX_WAVES :: 10
+
+// ---- Types ----
 
 Game :: struct {
 	window:   ^sdl.Window,
@@ -19,6 +25,12 @@ Game :: struct {
 
 World :: struct {
 	player: Player,
+	asset: Assets,
+}
+
+Assets :: struct {
+	ships: [WeaponType]^sdl.Texture
+	bullets: [WeaponType]^sdl.Texture
 }
 
 GameState :: enum {
@@ -28,6 +40,8 @@ GameState :: enum {
 	STATE_PAUSED,
 	STATE_GAME_OVER,
 }
+
+// ---- Init ----
 
 initialize_sdl :: proc(g: ^Game) -> bool {
 	if sdl.Init(SDL_FLAGS) != 0 {
@@ -51,21 +65,67 @@ initialize_sdl :: proc(g: ^Game) -> bool {
 		fmt.eprintfln("Error creating renderer: %s", sdl.GetError())
 		return false
 	}
-	return true
-}
-
-game_cleanup :: proc(g: ^Game) {
-	if g != nil {
-		if g.renderer != nil do sdl.DestroyRenderer(g.renderer)
-		if g.window != nil do sdl.DestroyWindow(g.window)
-		sdl.Quit()
+	img_flags := sdl_image.INIT_PNG
+	if (sdl_image.Init(img_flags) & img_flags) != img_flags {
+		fmt.eprintfln("SDL image initialization failted %s\n", sdl_image.GetError())
+		return false
 	}
-	sdl.Quit()
+	return true
 }
 
 world_init :: proc(world: ^World, renderer: ^sdl.Renderer) {
 	world.player = player_create(SCREEN_WIDTH, SCREEN_HEIGHT)
 }
+
+assets_init :: proc(asset: ^Assets, renderer: ^sdl.Renderer){
+	for i := 0; i < len(WeaponType); i += 1 {
+		def := get_weapon_def(i);
+		a.ships[i] = texture_load(renderer, def.ship_texture_path)
+		a.bullets[i] = texture_load(renderer, def.bullet_texture_path)
+	}
+}
+
+// ---- Update ----
+
+world_handle_events :: proc(world: ^World, event: ^sdl.Event, running: ^bool) {
+	for (sdl.PollEvent(event)) {
+		if event.type == .QUIT {
+			running^ = false
+		}
+		if event.type == .WINDOWEVENT && event.window.event == .CLOSE {
+			running^ = false
+		}
+		if event.type == .KEYDOWN && event.key.keysym.sym == .p {
+			running^ = false
+		}
+	}
+}
+
+// ---- Helper ----
+
+texture_load :: proc(renderer: ^sdl.Renderer, path: string) -> ^sdl.Texture {
+	if path == "" {
+		fmt.eprintfln("Texture load called NULL path\n")
+		return nil
+	}
+
+	surface := sdl_image.Load(path)
+	if surface == nil {
+		fmt.eprintfln("Unable to load image: %s", sdl_image.GetError())
+		return nil
+	}
+
+	defer sdl.FreeSurface(surface)
+
+	texture := sdl.CreateTextureFromSurface(renderer, surface)
+	if texture == nil {
+		fmt.eprintfln("Unable to create texture from surface: SDL Error: %s", sdl_image.GetError())
+		return nil
+	}
+	return texture
+}
+
+// ---- Render ----
 
 render_world :: proc(world: ^World, renderer: ^sdl.Renderer) {
 	sdl.SetRenderDrawColor(renderer, 0, 0, 0, 255)
@@ -84,19 +144,27 @@ render_world :: proc(world: ^World, renderer: ^sdl.Renderer) {
 	}
 }
 
-world_handle_events :: proc(world: ^World, event: ^sdl.Event, running: ^bool) {
-	for (sdl.PollEvent(event)) {
-		if event.type == .QUIT {
-			running^ = false
-		}
-		if event.type == .WINDOWEVENT && event.window.event == .CLOSE {
-			running^ = false
-		}
-		if event.type == .KEYDOWN && event.key.keysym.sym == .p {
-			running^ = false
+// ---- Clean Up ----
+
+assets_destroy :: proc(assets: ^Assets) {
+	for kind in WeaponType {
+		if assets.ships[kind] != nil {
+			sdl.DestroyTexture(assets.ships[kind])
+			assets.ships[kind] = nil
 		}
 	}
 }
+
+game_cleanup :: proc(g: ^Game) {
+	if g != nil {
+		if g.renderer != nil do sdl.DestroyRenderer(g.renderer)
+		if g.window != nil do sdl.DestroyWindow(g.window)
+		sdl.Quit()
+	}
+	sdl.Quit()
+}
+
+// ---- Main ----
 
 main :: proc() {
 	exit_status := 0
@@ -128,10 +196,12 @@ main :: proc() {
 
 		world_handle_events(&world, &event, &running)
 		keystate := sdl.GetKeyboardState(nil)
-		/* 
+
+	/* 
      * Player Update will eventually be merged into a game update
      * that will handle players, enemies, and level updates
      */
+
 		player_update(&world.player, keystate, delta_time)
 		render_world(&world, game.renderer)
 		sdl.RenderPresent(game.renderer)
