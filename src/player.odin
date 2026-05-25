@@ -98,9 +98,9 @@ player_update :: proc(p: ^Player, keystate: [^]u8, delta_time: f32) {
 	}
 }
 
-bullet_update :: proc(b: ^Bullet, deltaTime: f32) {
+bullet_update :: proc(b: ^Bullet, delta_time: f32) {
 	b.y -= b.speed * delta_time
-	if (b.y + b.height < 0) {
+	if (b.y + f32(b.height) < 0) {
 		b.active = false
 	}
 }

@@ -14,6 +14,8 @@ RENDERER_FLAGS :: sdl.RENDERER_ACCELERATED | sdl.RENDERER_PRESENTVSYNC
 SCREEN_WIDTH :: 1280
 SCREEN_HEIGHT :: 720
 WEAPON_COUNT :: 50
+MAX_BULLETS :: 50
+ENEMY_COUNT :: 50
 MAX_WAVES :: 10
 
 // ---- Types ----
@@ -25,6 +27,7 @@ Game :: struct {
 
 World :: struct {
 	player: Player,
+	bullets: [MAX_BULLETS]Bullet,
 	assets: Assets,
 	state: GameState
 }
