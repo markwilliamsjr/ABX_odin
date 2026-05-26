@@ -2,6 +2,8 @@ package main
 
 import sdl "vendor:sdl2"
 
+// ---- Types ----
+
 Wave :: struct {
 	level, total_enemies, spawn_count, species_unlocked: int,
 	threshold, spawn_delay, spawn_timer, dive_delay, dive_timer, speed_scalar: f32,
