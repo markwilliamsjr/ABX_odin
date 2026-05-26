@@ -2,6 +2,7 @@ package main
 
 import "core:fmt"
 import "core:os"
+import "core:strings"
 import sdl "vendor:sdl2"
 import sdl_image "vendor:sdl2/image"
 
@@ -15,7 +16,7 @@ SCREEN_WIDTH :: 1280
 SCREEN_HEIGHT :: 720
 WEAPON_COUNT :: 50
 MAX_BULLETS :: 50
-ENEMY_COUNT :: 50
+MAX_ENEMIES :: 50
 MAX_WAVES :: 10
 
 // ---- Types ----
@@ -26,23 +27,23 @@ Game :: struct {
 }
 
 World :: struct {
-	player: Player,
+	player:  Player,
 	bullets: [MAX_BULLETS]Bullet,
-	assets: Assets,
-	state: GameState
+	assets:  Assets,
+	state:   GameState,
 }
 
 Assets :: struct {
-	ships: [WeaponType]^sdl.Texture
-	bullets: [WeaponType]^sdl.Texture
+	ships:   [WeaponType]^sdl.Texture,
+	bullets: [WeaponType]^sdl.Texture,
 }
 
 GameState :: enum {
-	STATE_MENU,
-	STATE_PLAYING,
-	STATE_LEVEL_TRANSITION,
-	STATE_PAUSED,
-	STATE_GAME_OVER,
+	Menu,
+	Playing,
+	Level_Transition,
+	Paused,
+	Game_Over,
 }
 
 // ---- Init ----
@@ -79,19 +80,19 @@ initialize_sdl :: proc(g: ^Game) -> bool {
 
 world_init :: proc(world: ^World, renderer: ^sdl.Renderer) {
 	assets_init(&world.assets, renderer)
-	world.state = STATE_MENU
+	world.state = .Menu
 	world.player = player_init(SCREEN_WIDTH, SCREEN_HEIGHT)
 
-	for i in 0..<WEAPON_COUNT {
+	for i in 0 ..< WEAPON_COUNT {
 		world.bullets[i].active = false
 	}
 }
 
-assets_init :: proc(asset: ^Assets, renderer: ^sdl.Renderer){
+assets_init :: proc(asset: ^Assets, renderer: ^sdl.Renderer) {
 	for kind in WeaponType {
-		def := get_weapon_def(kind);
-		assets.ships[kind] = texture_load(renderer, def.ship_texture_path)
-		assets.bullets[kind] = texture_load(renderer, def.bullet_texture_path)
+		def := get_weapon_def(kind)
+		asset.ships[kind] = texture_load(renderer, def.ship_texture_path)
+		asset.bullets[kind] = texture_load(renderer, def.bullet_texture_path)
 	}
 }
 
@@ -119,7 +120,7 @@ texture_load :: proc(renderer: ^sdl.Renderer, path: string) -> ^sdl.Texture {
 		return nil
 	}
 
-	surface := sdl_image.Load(path)
+	surface := sdl_image.Load(strings.clone_to_cstring(path, context.temp_allocator))
 	if surface == nil {
 		fmt.eprintfln("Unable to load image: %s", sdl_image.GetError())
 		return nil
@@ -169,7 +170,7 @@ assets_destroy :: proc(assets: ^Assets) {
 	}
 }
 
-world_cleanup :: proc(world: ^World){
+world_cleanup :: proc(world: ^World) {
 	assets_destroy(&world.assets)
 }
 
@@ -187,6 +188,7 @@ game_cleanup :: proc(g: ^Game) {
 main :: proc() {
 	exit_status := 0
 	game: Game
+	world: World
 
 	defer {
 		world_cleanup(&world)
@@ -198,8 +200,6 @@ main :: proc() {
 		exit_status = 1
 		return
 	}
-
-	world: World
 	world_init(&world, game.renderer)
 
 	event: sdl.Event
@@ -216,7 +216,7 @@ main :: proc() {
 		world_handle_events(&world, &event, &running)
 		keystate := sdl.GetKeyboardState(nil)
 
-	/* 
+		/* 
      * Player Update will eventually be merged into a game update
      * that will handle players, enemies, and level updates
      */
