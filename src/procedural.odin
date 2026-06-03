@@ -3,6 +3,9 @@ package main
 import "core:math"
 import sdl "vendor:sdl2"
 
+// ---- Constants ----
+MAX_SEGMENTS :: 4
+
 // ---- Types ----
 PathType :: enum {
 	Arc,
@@ -17,7 +20,8 @@ FormationBounds :: struct {
 }
 
 EntryPathData :: struct {
-	control_points: [8]sdl.FPoint,
+	control_points: [MAX_SEGMENTS * 4]sdl.FPoint,
+	segment_pause:  [MAX_SEGMENTS]f32,
 	num_segments:   int,
 	path_type:      PathType,
 }
@@ -45,7 +49,6 @@ FormationParams :: union {
 	V_Params,
 	Semicircle_Params,
 }
-
 
 Line_Params :: struct {
 	max_per_row:          int,
