@@ -4,14 +4,6 @@ import sdl "vendor:sdl2"
 // ---- Constants ----
 
 // ---- Types ----
-
-Dive_Type :: enum {
-	Sine,
-	Scatter,
-	Zigzag,
-	Sweep,
-}
-
 Bacteria_Species :: enum {
 	Strep,
 	Staph,
@@ -63,6 +55,34 @@ Zigzag_Dive :: struct {
 Sweep_Dive :: struct {
 	control_points: [4]sdl.FPoint,
 	t:              f32,
+}
+
+Dive_Type :: union {
+	Sine_Dive,
+	Scatter_Dive,
+	Zigzag_Dive,
+	Sweep_Dive,
+}
+
+BacteriaDefinition :: struct {
+	species:             Bacteria_Species,
+	weakness:            WeaponType,
+	r, g, b:             u8,
+	health, base_speed:  int,
+	width, height:       int,
+	hb_width, hb_height: int,
+	offset_x, offset_y:  int,
+	framecount:          int,
+	frame_duration:      f32,
+	texture_path:        string,
+}
+
+Bacteria_State :: enum {
+	Entering,
+	Holding,
+	Diving,
+	Returning,
+	Fleeing,
 }
 
 // ---- Data ----
