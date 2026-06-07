@@ -4,7 +4,7 @@ import sdl "vendor:sdl2"
 // ---- Constants ----
 
 // ---- Types ----
-Bacteria_Species :: enum {
+BacteriaSpecies :: enum {
 	Strep,
 	Staph,
 	Ecoli,
@@ -14,7 +14,7 @@ Bacteria_Species :: enum {
 Scatter_Phase :: enum {
 	Bursting,
 	Pausing,
-	Dashing,
+	Diving,
 }
 
 Zigzag_Phase :: enum {
@@ -25,7 +25,7 @@ Zigzag_Phase :: enum {
 Sine_Dive :: struct {
 	phase:      f32,
 	amplitude:  f32,
-	freqency:   f32,
+	frequency:   f32,
 	start_x:    f32,
 	dive_speed: f32,
 }
@@ -72,7 +72,7 @@ BacteriaDefinition :: struct {
 	width, height:       int,
 	hb_width, hb_height: int,
 	offset_x, offset_y:  int,
-	framecount:          int,
+	frame_count:          int,
 	frame_duration:      f32,
 	texture_path:        string,
 }
@@ -95,7 +95,6 @@ BacteriaHot :: struct {
 
 BacteriaCold :: struct {
 	bacteria_state: BacteriaState,
-    dive_type: DiveType,
     entry_path: EntryPathData,
     current_segment: int,
 	pause_timer: f32,
@@ -111,7 +110,6 @@ BACTERIA_DEFS := [BacteriaSpecies]BacteriaDefinition {
     .Strep = {
         species = .Strep,
         weakness = .PCN,
-		dive_type = .Sine_Dive,
         r = 0,
         g = 200,
         b = 0,
@@ -130,7 +128,6 @@ BACTERIA_DEFS := [BacteriaSpecies]BacteriaDefinition {
 	.Staph = {
 		species = .Staph,
 		weakness = .PCN,
-		dive_type = .Scatter_Dive,
 		r = 150,
 		g = 200,
 		b = 0,
@@ -149,7 +146,6 @@ BACTERIA_DEFS := [BacteriaSpecies]BacteriaDefinition {
 	.Ecoli = {
 		species = .Ecoli,
 		weakness = .PMX,
-		dive_type = .Zigzag_Dive,
 		r = 0,
 		g = 100,
 		b = 200,
@@ -168,18 +164,19 @@ BACTERIA_DEFS := [BacteriaSpecies]BacteriaDefinition {
 	.Pseudomonas = {
 		species = .Pseudomonas,
 		weakness = .PMX,
-		dive_type = . Sweep_Dive,
 		r = 0,
 		g = 200,
 		b = 200,
 		health = 6,
-		speed = 400.0,
+		base_speed = 400.0,
 		width = 50,
 		height = 50,
 		hb_width = 50,
 		hb_height = 50,
 		offset_x = 0,
 		offset_y = 0,
+		frame_count = 1,
+		frame_duration = 0.0,
 		texture_path = "assets/bacteria/pseudomonas.png"
 	},
 }
