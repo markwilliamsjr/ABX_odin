@@ -57,7 +57,7 @@ Sweep_Dive :: struct {
 	t:              f32,
 }
 
-Dive_Type :: union {
+DiveType :: union {
 	Sine_Dive,
 	Scatter_Dive,
 	Zigzag_Dive,
@@ -77,12 +77,111 @@ BacteriaDefinition :: struct {
 	texture_path:        string,
 }
 
-Bacteria_State :: enum {
+BacteriaState :: enum {
 	Entering,
 	Holding,
 	Diving,
 	Returning,
 	Fleeing,
+}
+
+BacteriaHot :: struct {
+    x, y, animation_timer, angle: f32,
+    width, height, hb_width, hb_height: int,
+    offset_x, offset_y, health, current_frame: int,
+    active: bool, 
+    species: Bacteria_Species 
+}
+
+BacteriaCold :: struct {
+	bacteria_state: BacteriaState,
+    dive_type: DiveType,
+    entry_path: EntryPathData,
+    current_segment: int,
+	pause_timer: f32,
+    state_start_time: u64,
+    t, speed, speed_scalar: f32,
+    dive_initialized, return_initialized, should_flee: bool,
+    formation_point, return_start_point: sdl.FPoint
+}
+
+// ---- Definitions / Table ----
+
+BACTERIA_DEFS := [BacteriaSpecies]BacteriaDefinition {
+    .Strep = {
+        species = .Strep,
+        weakness = .PCN,
+		dive_type = .Sine_Dive,
+        r = 0,
+        g = 200,
+        b = 0,
+        health = 6,
+        base_speed = 400.0,
+        width = 32, 
+        height = 64,
+        hb_width = 22,
+        hb_height = 64,
+        offset_x = 5,
+        offset_y = 0,
+        frame_count = 12,
+        frame_duration = 1.0 / 12.0,
+        texture_path = "assets/bacteria/strep.png"
+    },
+	.Staph = {
+		species = .Staph,
+		weakness = .PCN,
+		dive_type = .Scatter_Dive,
+		r = 150,
+		g = 200,
+		b = 0,
+		health = 6,
+		base_speed = 300.0,
+		width = 50,
+		height = 50,
+		hb_width = 50,
+		hb_height = 50,
+		offset_x = 0,
+		offset_y = 0,
+		frame_count = 1,
+		frame_duration = 0.0,
+		texture_path = "assets/bacteria/staph.png"
+	},
+	.Ecoli = {
+		species = .Ecoli,
+		weakness = .PMX,
+		dive_type = .Zigzag_Dive,
+		r = 0,
+		g = 100,
+		b = 200,
+		health = 6,
+		base_speed = 300.0,
+		width = 50,
+		height = 50,
+		hb_height = 50,
+		hb_width = 50,
+		offset_x = 0,
+		offset_y = 0,
+		frame_count = 1,
+		frame_duration = 0.0,
+		texture_path = "assets/bacteria/ecoli"
+	},
+	.Pseudomonas = {
+		species = .Pseudomonas,
+		weakness = .PMX,
+		dive_type = . Sweep_Dive,
+		r = 0,
+		g = 200,
+		b = 200,
+		health = 6,
+		speed = 400.0,
+		width = 50,
+		height = 50,
+		hb_width = 50,
+		hb_height = 50,
+		offset_x = 0,
+		offset_y = 0,
+		texture_path = "assets/bacteria/pseudomonas.png"
+	},
 }
 
 // ---- Data ----
