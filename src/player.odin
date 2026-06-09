@@ -12,8 +12,8 @@ Player :: struct {
 
 WeaponType :: enum {
 	Neutral,
-	// PCN,
-	// PMX,
+	PCN,
+	PMX,
 }
 
 WeaponDefinition :: struct {
@@ -43,6 +43,28 @@ WEAPON_DEFS := [WeaponType]WeaponDefinition {
 		damage_ineffective = 3,
 		width = 8,
 		height = 23,
+		speed = 300.0,
+	},
+	.PCN = {
+		weapon_type = .PCN,
+		bullet_texture_path = "assets/weapons/pcn_shot.png",
+		ship_texture_path = "assets/ships/ship_pcn.png",
+		damage_effective = 6,
+		damage_neutral = 3,
+		damage_ineffective = 2,
+		width = 8,
+		height = 8,
+		speed = 300.0,
+	},
+	.PMX = {
+		weapon_type = .PMX,
+		bullet_texture_path = "assets/weapons/pmx_shot.png",
+		ship_texture_path = "assets/ships/ship_pmx.png",
+		damage_effective = 6,
+		damage_neutral = 3,
+		damage_ineffective = 2,
+		width = 8,
+		height = 8,
 		speed = 300.0,
 	},
 }
@@ -110,4 +132,3 @@ bullet_update :: proc(b: ^Bullet, delta_time: f32) {
 get_weapon_def :: proc(weapon_type: WeaponType) -> ^WeaponDefinition {
 	return &WEAPON_DEFS[weapon_type]
 }
-

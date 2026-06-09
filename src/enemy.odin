@@ -1,5 +1,7 @@
 package main
 
+import "core:math"
+import "core:math/rand"
 import sdl "vendor:sdl2"
 // ---- Constants ----
 
@@ -25,7 +27,7 @@ Zigzag_Phase :: enum {
 Sine_Dive :: struct {
 	phase:      f32,
 	amplitude:  f32,
-	frequency:   f32,
+	frequency:  f32,
 	start_x:    f32,
 	dive_speed: f32,
 }
@@ -65,14 +67,14 @@ DiveType :: union {
 }
 
 BacteriaDefinition :: struct {
-	species:             Bacteria_Species,
+	species:             BacteriaSpecies,
 	weakness:            WeaponType,
 	r, g, b:             u8,
 	health, base_speed:  int,
 	width, height:       int,
 	hb_width, hb_height: int,
 	offset_x, offset_y:  int,
-	frame_count:          int,
+	frame_count:         int,
 	frame_duration:      f32,
 	texture_path:        string,
 }
@@ -86,45 +88,46 @@ BacteriaState :: enum {
 }
 
 BacteriaHot :: struct {
-    x, y, animation_timer, angle: f32,
-    width, height, hb_width, hb_height: int,
-    offset_x, offset_y, health, current_frame: int,
-    active: bool, 
-    species: Bacteria_Species 
+	x, y, animation_timer, angle:              f32,
+	width, height, hb_width, hb_height:        int,
+	offset_x, offset_y, health, current_frame: int,
+	active:                                    bool,
+	species:                                   BacteriaSpecies,
 }
 
 BacteriaCold :: struct {
-	bacteria_state: BacteriaState,
-    entry_path: EntryPathData,
-    current_segment: int,
-	pause_timer: f32,
-    state_start_time: u64,
-    t, speed, speed_scalar: f32,
-    dive_initialized, return_initialized, should_flee: bool,
-    formation_point, return_start_point: sdl.FPoint
+	bacteria_state:                                    BacteriaState,
+	entry_path:                                        EntryPathData,
+	dive_type:                                         DiveType,
+	current_segment:                                   int,
+	pause_timer:                                       f32,
+	state_start_time:                                  u64,
+	t, speed, speed_scalar:                            f32,
+	dive_initialized, return_initialized, should_flee: bool,
+	formation_point, return_start_point:               sdl.FPoint,
 }
 
 // ---- Definitions / Table ----
 
 BACTERIA_DEFS := [BacteriaSpecies]BacteriaDefinition {
-    .Strep = {
-        species = .Strep,
-        weakness = .PCN,
-        r = 0,
-        g = 200,
-        b = 0,
-        health = 6,
-        base_speed = 400.0,
-        width = 32, 
-        height = 64,
-        hb_width = 22,
-        hb_height = 64,
-        offset_x = 5,
-        offset_y = 0,
-        frame_count = 12,
-        frame_duration = 1.0 / 12.0,
-        texture_path = "assets/bacteria/strep.png"
-    },
+	.Strep = {
+		species = .Strep,
+		weakness = .PCN,
+		r = 0,
+		g = 200,
+		b = 0,
+		health = 6,
+		base_speed = 400.0,
+		width = 32,
+		height = 64,
+		hb_width = 22,
+		hb_height = 64,
+		offset_x = 5,
+		offset_y = 0,
+		frame_count = 12,
+		frame_duration = 1.0 / 12.0,
+		texture_path = "assets/bacteria/strep.png",
+	},
 	.Staph = {
 		species = .Staph,
 		weakness = .PCN,
@@ -141,7 +144,7 @@ BACTERIA_DEFS := [BacteriaSpecies]BacteriaDefinition {
 		offset_y = 0,
 		frame_count = 1,
 		frame_duration = 0.0,
-		texture_path = "assets/bacteria/staph.png"
+		texture_path = "assets/bacteria/staph.png",
 	},
 	.Ecoli = {
 		species = .Ecoli,
@@ -159,7 +162,7 @@ BACTERIA_DEFS := [BacteriaSpecies]BacteriaDefinition {
 		offset_y = 0,
 		frame_count = 1,
 		frame_duration = 0.0,
-		texture_path = "assets/bacteria/ecoli"
+		texture_path = "assets/bacteria/ecoli",
 	},
 	.Pseudomonas = {
 		species = .Pseudomonas,
@@ -177,11 +180,58 @@ BACTERIA_DEFS := [BacteriaSpecies]BacteriaDefinition {
 		offset_y = 0,
 		frame_count = 1,
 		frame_duration = 0.0,
-		texture_path = "assets/bacteria/pseudomonas.png"
+		texture_path = "assets/bacteria/pseudomonas.png",
 	},
 }
-
-// ---- Data ----
 // ---- Init ----
+
+dive_init :: proc(hot: ^BacteriaHot, cold: ^BacteriaCold, player_x: f32) {
+	switch hot.species {
+	case .Strep:
+		cold.dive_type = Sine_Dive {
+			amplitude  = 10.0,
+			frequency  = 1.0,
+			start_x    = hot.x,
+			dive_speed = 200.0,
+		}
+	case .Staph:
+		cold.dive_type = Scatter_Dive {
+			burst_angle    = rand.float32() * math.PI,
+			burst_speed    = 500.0,
+			burst_pause    = 0.6,
+			burst_duration = 0.4,
+			timer          = 0.0,
+			start_x        = hot.x,
+			start_y        = hot.y,
+			phase          = .Bursting,
+		}
+	case .Ecoli:
+		cold.dive_type = Zigzag_Dive {
+			direction = player_x >= hot.x ? 1 : -1,
+			cooldown  = 0.2,
+			timer     = 0.0,
+			speed     = 300.0,
+			start_x   = hot.x,
+			start_y   = hot.y,
+			phase     = .Dashing,
+		}
+	case .Pseudomonas:
+		cps: [4]sdl.FPoint
+		cps[0] = {hot.x, hot.y}
+		cps[1] = {hot.x, hot.y + 500}
+		if hot.x >= f32(SCREEN_WIDTH) / 2 {
+			cps[2] = {f32(SCREEN_WIDTH) * 0.25, f32(SCREEN_WIDTH) * 0.9}
+			cps[3] = {0, f32(SCREEN_HEIGHT) + f32(hot.height)}
+		} else {
+			cps[2] = {f32(SCREEN_WIDTH) * 0.75, f32(SCREEN_WIDTH) * 0.9}
+			cps[3] = {f32(SCREEN_WIDTH), f32(SCREEN_HEIGHT) + f32(hot.height)}
+		}
+		cold.dive_type = Sweep_Dive {
+			control_points = cps,
+			t              = 0.0,
+		}
+	}
+}
+
 // ---- Update ----
 // ---- Helper ----
