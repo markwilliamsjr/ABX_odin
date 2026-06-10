@@ -185,7 +185,7 @@ BACTERIA_DEFS := [BacteriaSpecies]BacteriaDefinition {
 }
 // ---- Init ----
 
-dive_init :: proc(hot: ^BacteriaHot, cold: ^BacteriaCold, player_x: f32) {
+bacteria_dive_init :: proc(hot: ^BacteriaHot, cold: ^BacteriaCold, player_x: f32) {
 	switch hot.species {
 	case .Strep:
 		cold.dive_type = Sine_Dive {
@@ -234,4 +234,32 @@ dive_init :: proc(hot: ^BacteriaHot, cold: ^BacteriaCold, player_x: f32) {
 }
 
 // ---- Update ----
+
+bacteria_dive_update :: proc(
+	hot: ^BacteriaHot,
+	cold: ^BacteriaCold,
+	delta_time: f32,
+	player_x: f32,
+) {
+	bacteria_def := get_bacteria_def(hot.species)
+
+	switch &dive in cold.dive_type {
+	case Sine_Dive:
+		dive.phase = dive.frequency * 2.0 * math.PI * delta_time
+		eased := math.sin(dive.phase)
+		hot.x = dive.start_x + eased + dive.amplitude
+		cycle_position := math.mod(dive.phase, 2.0 * math.PI) / (2.0 * math.PI)
+		if cycle_position < 0 do cycle_position += 1.0
+		hot.current_frame = int(cycle_position * f32(bacteria_def.frame_count))
+		if hot.current_frame >= bacteria_def.frame_count do hot.current_frame = bacteria_def.frame_count - 1
+		hot.y = dive.dive_speed * delta_time
+	case Scatter_Dive:
+	case Zigzag_Dive:
+	case Sweep_Dive:
+	}
+}
+
 // ---- Helper ----
+get_bacteria_def :: proc(bacteria_species: BacteriaSpecies) -> ^BacteriaDefinition {
+	return &BACTERIA_DEFS[bacteria_species]
+}
