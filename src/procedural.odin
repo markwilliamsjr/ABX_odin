@@ -45,27 +45,46 @@ WaveParams :: struct {
 //}
 
 FormationParams :: union {
-	Line_Params,
-	V_Params,
-	Semicircle_Params,
+	LineParams,
+	VParams,
+	SemicircleParams,
 }
 
-Line_Params :: struct {
+LineParams :: struct {
 	max_per_row:          int,
 	row_spacing_fraction: f32,
 }
 
-V_Params :: struct {
+VParams :: struct {
 	apex_angle: f32,
 }
 
-Semicircle_Params :: struct {
+SemicircleParams :: struct {
 	radius_fraction: f32,
+}
+
+LineLayout :: struct {
+	cols, max_rows, max_count: int,
 }
 
 // ---- Data ----
 
 // ---- Init ----
+
+generate_formation :: proc(
+	positions: []sdl.FPoint,
+	count: int,
+	min_spacing: f32,
+	bounds: FormationBounds,
+	params: FormationParams,
+) -> FormationResult {
+	switch fp in params {
+	case LineParams:
+	case VParams:
+	case SemicircleParams:
+	}
+	return {}
+}
 
 // ---- Update ----
 
@@ -82,13 +101,13 @@ level_to_params :: proc(level: int) -> WaveParams {
 		spawn_delay = 0.3,
 		threshold = 0.8,
 		path_type = .Line_Ish,
-		formation_params = Line_Params{max_per_row = -1, row_spacing_fraction = 1.0},
+		formation_params = LineParams{max_per_row = -1, row_spacing_fraction = 1.0},
 	}
 	wp.speed_scalar = 1.0 + f32(block_number) * 0.2 + f32(level_in_block) * 0.1
 	return wp
 }
 
-generate_path :: proc(
+generate_entry_path :: proc(
 	path_type: PathType,
 	start: sdl.FPoint,
 	destination: sdl.FPoint,
@@ -204,4 +223,22 @@ generate_path :: proc(
 	case .Loop_De_Loop:
 	}
 	return path
+}
+
+compute_line_layout :: proc(
+	bounds: FormationBounds,
+	params: LineParams,
+	min_spacing: f32,
+) -> LineLayout {
+	line_layout: LineLayout
+
+	width_cap := int(bounds.width / min_spacing) - 1
+	if width_cap < 1 {
+		width_cap = 1
+	}
+	if params.max_per_row > 0 && params.max_per_row < width_cap {
+		width_cap = params.max_per_row
+	}
+	line_layout.cols = width_cap
+	return {}
 }

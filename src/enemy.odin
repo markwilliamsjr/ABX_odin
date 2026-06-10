@@ -249,11 +249,56 @@ bacteria_dive_update :: proc(
 		eased := math.sin(dive.phase)
 		hot.x = dive.start_x + eased + dive.amplitude
 		cycle_position := math.mod(dive.phase, 2.0 * math.PI) / (2.0 * math.PI)
+
 		if cycle_position < 0 do cycle_position += 1.0
+
 		hot.current_frame = int(cycle_position * f32(bacteria_def.frame_count))
+
 		if hot.current_frame >= bacteria_def.frame_count do hot.current_frame = bacteria_def.frame_count - 1
+
 		hot.y = dive.dive_speed * delta_time
+		hot.angle =
+			math.atan2(dive.dive_speed, math.cos(dive.phase) * dive.amplitude * dive.frequency) *
+				(180.0 / math.PI) -
+			90
+
+		if hot.y > SCREEN_HEIGHT {
+			cold.bacteria_state = .Returning
+			cold.dive_initialized = false
+			cold.return_start_point = {hot.x, 0 - f32(hot.height)}
+			cold.t = 0
+		}
+
 	case Scatter_Dive:
+		if dive.phase == .Bursting {
+			hot.x += math.cos(dive.burst_angle) * dive.burst_speed * delta_time
+			hot.y += math.sin(dive.burst_angle) * dive.burst_speed * delta_time
+			dive.timer += delta_time
+
+			if dive.timer >= dive.burst_duration {
+				dive.phase = .Pausing
+				dive.timer = 0.0
+			}
+		} else if dive.phase == .Pausing {
+			dive.timer += delta_time
+			if dive.timer >= dive.burst_pause {
+				dive.phase = .Diving
+				dive.target_x = player_x + (rand.float32() * 0.5) * 200.0
+			}
+		} else if dive.phase == .Diving {
+			diff := dive.target_x - hot.x
+			if diff > 1.0 {
+				hot.x += dive.burst_speed * 0.3 * delta_time
+			} else if diff < 1.0 {
+				hot.x -= dive.burst_speed * 0.3 * delta_time
+			}
+			hot.y += delta_time * dive.burst_speed
+
+			if hot.y > SCREEN_HEIGHT {
+				cold.bacteria_state = .Returning
+				cold.dive_initialized = false
+			}
+		}
 	case Zigzag_Dive:
 	case Sweep_Dive:
 	}
