@@ -184,6 +184,43 @@ BACTERIA_DEFS := [BacteriaSpecies]BacteriaDefinition {
 	},
 }
 // ---- Init ----
+bacteria_init :: proc(
+	hot: ^BacteriaHot,
+	cold: ^BacteriaCold,
+	speed_scalar: f32,
+	path_data: EntryPathData,
+	formation_posistion: sdl.FPoint,
+	species: BacteriaSpecies,
+) {
+	bacteria_def := get_bacteria_def(species)
+	hot.height = bacteria_def.height
+	hot.width = bacteria_def.width
+	hot.hb_height = bacteria_def.hb_height
+	hot.hb_width = bacteria_def.hb_width
+	hot.offset_x = bacteria_def.offset_x
+	hot.offset_y = bacteria_def.offset_y
+	hot.health = bacteria_def.health
+	hot.active = true
+	hot.species = species
+	hot.x = path_data.control_points[0].x
+	hot.y = path_data.control_points[0].y
+	hot.current_frame = int(rand.int31()) % bacteria_def.frame_count
+	hot.animation_timer = 0.0
+	hot.angle = 0.0
+
+	cold.speed_scalar = speed_scalar
+	cold.speed = f32(bacteria_def.base_speed) * cold.speed_scalar
+	cold.state_start_time = 0.0
+	cold.bacteria_state = .Entering
+	cold.t = 0.0
+	cold.entry_path = path_data
+	cold.formation_point = formation_posistion
+	cold.dive_initialized = false
+	cold.return_initialized = false
+	cold.should_flee = false
+	cold.current_segment = 0
+	cold.pause_timer = 0.0
+}
 
 bacteria_dive_init :: proc(hot: ^BacteriaHot, cold: ^BacteriaCold, player_x: f32) {
 	switch hot.species {
@@ -308,3 +345,4 @@ bacteria_dive_update :: proc(
 get_bacteria_def :: proc(bacteria_species: BacteriaSpecies) -> ^BacteriaDefinition {
 	return &BACTERIA_DEFS[bacteria_species]
 }
+
