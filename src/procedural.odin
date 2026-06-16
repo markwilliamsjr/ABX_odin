@@ -64,7 +64,7 @@ SemicircleParams :: struct {
 }
 
 LineLayout :: struct {
-	cols, max_rows, max_count: int,
+	cols, rows, max_count: int,
 }
 
 // ---- Data ----
@@ -240,5 +240,14 @@ compute_line_layout :: proc(
 		width_cap = params.max_per_row
 	}
 	line_layout.cols = width_cap
-	return {}
+
+	row_spacing := min_spacing * params.row_spacing_fraction
+	line_layout.rows = int(bounds.height / row_spacing) - 1
+	if line_layout.rows < 1 {
+		line_layout.rows = 1
+	}
+	line_layout.max_count = line_layout.rows * line_layout.cols
+
+	return line_layout
 }
+
