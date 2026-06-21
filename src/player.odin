@@ -25,10 +25,10 @@ WeaponDefinition :: struct {
 }
 
 Bullet :: struct {
-	x, y, speed:   f32,
-	width, height: int,
-	active:        bool,
-	weapon_type:   WeaponType,
+	x, y, speed:   [MAX_BULLETS]f32,
+	active:        [MAX_BULLETS]bool,
+	weapon_type:   [MAX_BULLETS]WeaponType,
+	count: int
 }
 
 // ---- Definitions / Tables ----

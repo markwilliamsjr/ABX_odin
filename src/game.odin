@@ -24,12 +24,13 @@ MAX_WAVES :: 10
 Game :: struct {
 	window:   ^sdl.Window,
 	renderer: ^sdl.Renderer,
+	assets:  Assets,
+	world: World,
 }
 
 World :: struct {
 	player:  Player,
 	bullets: [MAX_BULLETS]Bullet,
-	assets:  Assets,
 	state:   GameState,
 }
 
