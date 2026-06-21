@@ -30,7 +30,7 @@ Game :: struct {
 
 World :: struct {
 	player:  Player,
-	bullets: [MAX_BULLETS]Bullet,
+	bullets: Bullets,
 	state:   GameState,
 }
 

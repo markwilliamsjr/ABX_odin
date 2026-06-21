@@ -24,9 +24,8 @@ WeaponDefinition :: struct {
 	speed:                                                               f32,
 }
 
-Bullet :: struct {
+Bullets :: struct {
 	x, y, speed:   [MAX_BULLETS]f32,
-	active:        [MAX_BULLETS]bool,
 	weapon_type:   [MAX_BULLETS]WeaponType,
 	count: int
 }
@@ -91,9 +90,7 @@ player_init :: proc(screen_width: int, screen_height: int) -> Player {
 
 bullet_init :: proc(player: ^Player) -> Bullet {
 	def := get_weapon_def(player.current_ammo)
-	b := Bullet {
-		width       = def.width,
-		height      = def.height,
+	b := Bullets {
 		speed       = def.speed,
 		active      = true,
 		weapon_type = player.current_ammo,
@@ -131,4 +128,17 @@ bullet_update :: proc(b: ^Bullet, delta_time: f32) {
 
 get_weapon_def :: proc(weapon_type: WeaponType) -> ^WeaponDefinition {
 	return &WEAPON_DEFS[weapon_type]
+}
+
+bullet_spawn :: proc(bullet: ^Bullets, player: ^Player) {
+
+}
+
+bullet_remove :: proc(bullet: ^Bullets, index: int) {
+	last := count - 1
+	bullet.x[index] = bullet.x[last]
+	bullet.y[index] = bullet.y[last]
+	bullet.speed[index] = bullet.speed[last]
+	bullet.weapon_type[index] = bullet.weapon_type[last]
+	bullet.count -= 1
 }

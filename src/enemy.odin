@@ -162,7 +162,7 @@ BACTERIA_DEFS := [BacteriaSpecies]BacteriaDefinition {
 		offset_y = 0,
 		frame_count = 1,
 		frame_duration = 0.0,
-		texture_path = "assets/bacteria/ecoli",
+		texture_path = "assets/bacteria/ecoli.png",
 	},
 	.Pseudomonas = {
 		species = .Pseudomonas,
@@ -282,9 +282,9 @@ bacteria_dive_update :: proc(
 
 	switch &dive in cold.dive_type {
 	case Sine_Dive:
-		dive.phase = dive.frequency * 2.0 * math.PI * delta_time
+		dive.phase += dive.frequency * 2.0 * math.PI * delta_time
 		eased := math.sin(dive.phase)
-		hot.x = dive.start_x + eased + dive.amplitude
+		hot.x += dive.start_x + eased + dive.amplitude
 		cycle_position := math.mod(dive.phase, 2.0 * math.PI) / (2.0 * math.PI)
 
 		if cycle_position < 0 do cycle_position += 1.0
@@ -293,7 +293,7 @@ bacteria_dive_update :: proc(
 
 		if hot.current_frame >= bacteria_def.frame_count do hot.current_frame = bacteria_def.frame_count - 1
 
-		hot.y = dive.dive_speed * delta_time
+		hot.y += dive.dive_speed * delta_time
 		hot.angle =
 			math.atan2(dive.dive_speed, math.cos(dive.phase) * dive.amplitude * dive.frequency) *
 				(180.0 / math.PI) -
