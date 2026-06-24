@@ -25,9 +25,9 @@ WeaponDefinition :: struct {
 }
 
 Bullets :: struct {
-	x, y, speed:   [MAX_BULLETS]f32,
-	weapon_type:   [MAX_BULLETS]WeaponType,
-	count: int
+	x, y, speed: [MAX_BULLETS]f32,
+	weapon_type: [MAX_BULLETS]WeaponType,
+	count:       int,
 }
 
 // ---- Definitions / Tables ----
@@ -88,18 +88,6 @@ player_init :: proc(screen_width: int, screen_height: int) -> Player {
 	return p
 }
 
-bullet_init :: proc(player: ^Player) -> Bullet {
-	def := get_weapon_def(player.current_ammo)
-	b := Bullets {
-		speed       = def.speed,
-		active      = true,
-		weapon_type = player.current_ammo,
-	}
-	b.x = player.x + (f32(player.width) / 2.0) - (f32(b.width) / 2.0)
-	b.y = player.y
-	return b
-}
-
 // ---- Update ----
 
 player_update :: proc(p: ^Player, keystate: [^]u8, delta_time: f32) {
@@ -117,13 +105,6 @@ player_update :: proc(p: ^Player, keystate: [^]u8, delta_time: f32) {
 	}
 }
 
-bullet_update :: proc(b: ^Bullet, delta_time: f32) {
-	b.y -= b.speed * delta_time
-	if (b.y + f32(b.height) < 0) {
-		b.active = false
-	}
-}
-
 // ---- Helpers ----
 
 get_weapon_def :: proc(weapon_type: WeaponType) -> ^WeaponDefinition {
@@ -131,14 +112,34 @@ get_weapon_def :: proc(weapon_type: WeaponType) -> ^WeaponDefinition {
 }
 
 bullet_spawn :: proc(bullet: ^Bullets, player: ^Player) {
+	if bullet.count == MAX_BULLETS {
+		return
+	}
+	wep_def := get_weapon_def(player.current_ammo)
 
+	bullet.x[bullet.count] = player.x + (f32(player.width) / 2) - (f32(wep_def.width) / 2)
+	bullet.y[bullet.count] = player.y
+	bullet.speed[bullet.count] = wep_def.speed
+	bullet.weapon_type[bullet.count] = player.current_ammo
+	bullet.count += 1
+}
+
+bullet_update :: proc(bullets: ^Bullets, delta_time: f32) {
+	for i := bullets.count - 1; i >= 0; i -= 1 {
+		wep_def := get_weapon_def(bullets.weapon_type[i])
+		bullets.y[i] -= bullets.speed[i] * delta_time
+		if bullets.y[i] + f32(wep_def.height) <= 0 {
+			bullet_remove(bullets, i)
+		}
+	}
 }
 
 bullet_remove :: proc(bullet: ^Bullets, index: int) {
-	last := count - 1
+	last := bullet.count - 1
 	bullet.x[index] = bullet.x[last]
 	bullet.y[index] = bullet.y[last]
 	bullet.speed[index] = bullet.speed[last]
 	bullet.weapon_type[index] = bullet.weapon_type[last]
 	bullet.count -= 1
 }
+

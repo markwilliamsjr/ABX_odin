@@ -24,8 +24,8 @@ MAX_WAVES :: 10
 Game :: struct {
 	window:   ^sdl.Window,
 	renderer: ^sdl.Renderer,
-	assets:  Assets,
-	world: World,
+	assets:   Assets,
+	world:    World,
 }
 
 World :: struct {
@@ -79,14 +79,15 @@ initialize_sdl :: proc(g: ^Game) -> bool {
 	return true
 }
 
-world_init :: proc(world: ^World, renderer: ^sdl.Renderer) {
-	assets_init(&world.assets, renderer)
+game_init :: proc(game: ^Game) {
+	assets_init(&game.assets, game.renderer)
+	world_init(&game.world)
+}
+
+world_init :: proc(world: ^World) {
 	world.state = .Menu
 	world.player = player_init(SCREEN_WIDTH, SCREEN_HEIGHT)
 
-	for i in 0 ..< WEAPON_COUNT {
-		world.bullets[i].active = false
-	}
 }
 
 assets_init :: proc(asset: ^Assets, renderer: ^sdl.Renderer) {
@@ -172,11 +173,12 @@ assets_destroy :: proc(assets: ^Assets) {
 }
 
 world_cleanup :: proc(world: ^World) {
-	assets_destroy(&world.assets)
 }
 
 game_cleanup :: proc(g: ^Game) {
 	if g != nil {
+		world_cleanup(&g.world)
+		assets_destroy(&g.assets)
 		if g.renderer != nil do sdl.DestroyRenderer(g.renderer)
 		if g.window != nil do sdl.DestroyWindow(g.window)
 		sdl.Quit()
@@ -189,10 +191,8 @@ game_cleanup :: proc(g: ^Game) {
 main :: proc() {
 	exit_status := 0
 	game: Game
-	world: World
 
 	defer {
-		world_cleanup(&world)
 		game_cleanup(&game)
 		os.exit(exit_status)
 	}
@@ -201,7 +201,7 @@ main :: proc() {
 		exit_status = 1
 		return
 	}
-	world_init(&world, game.renderer)
+	game_init(&game)
 
 	event: sdl.Event
 	last_time := sdl.GetTicks()
@@ -214,7 +214,7 @@ main :: proc() {
 		delta_time := f32(current_time - last_time) / 1000.0
 		last_time = current_time
 
-		world_handle_events(&world, &event, &running)
+		world_handle_events(&game.world, &event, &running)
 		keystate := sdl.GetKeyboardState(nil)
 
 		/* 
@@ -222,8 +222,9 @@ main :: proc() {
      * that will handle players, enemies, and level updates
      */
 
-		player_update(&world.player, keystate, delta_time)
-		render_world(&world, game.renderer)
+		player_update(&game.world.player, keystate, delta_time)
+		render_world(&game.world, game.renderer)
 		sdl.RenderPresent(game.renderer)
 	}
 }
+
