@@ -93,7 +93,13 @@ assets_init :: proc(asset: ^Assets, renderer: ^sdl.Renderer) {
 	for kind in WeaponType {
 		def := get_weapon_def(kind)
 		asset.ships[kind] = texture_load(renderer, def.ship_texture_path)
+		if asset.ships[kind] != nil {
+			fmt.printfln("Ship Texture Loaded")
+		}
 		asset.bullets[kind] = texture_load(renderer, def.bullet_texture_path)
+		if asset.bullets[kind] != nil {
+			fmt.printfln("Bullet Texture Loaded")
+		}
 	}
 }
 
@@ -149,32 +155,28 @@ player_fire_bullet :: proc(player: ^Player, bullet: ^Bullets, keystate: [^]u8) {
 
 // ---- Render ----
 
-render_world :: proc(world: ^World, renderer: ^sdl.Renderer) {
+render_world :: proc(world: ^World, assets: ^Assets, renderer: ^sdl.Renderer) {
 	sdl.SetRenderDrawColor(renderer, 0, 0, 0, 255)
 	sdl.RenderClear(renderer)
 
 	if world.player.active {
-		sdl.SetRenderDrawColor(renderer, 255, 0, 0, 0)
 		player := sdl.Rect {
 			x = i32(world.player.x),
 			y = i32(world.player.y),
 			w = i32(world.player.width),
 			h = i32(world.player.height),
 		}
-		sdl.RenderDrawRect(renderer, &player)
-		sdl.RenderFillRect(renderer, &player)
+		sdl.RenderCopy(renderer, assets.ships[world.player.current_ammo], nil, &player)
 	}
 	for i in 0 ..< world.bullets.count {
 		wep_def := get_weapon_def(world.bullets.weapon_type[i])
-		sdl.SetRenderDrawColor(renderer, 255, 255, 0, 255)
 		bullet := sdl.Rect {
 			x = i32(world.bullets.x[i]),
 			y = i32(world.bullets.y[i]),
 			w = i32(wep_def.width),
 			h = i32(wep_def.height),
 		}
-		sdl.RenderDrawRect(renderer, &bullet)
-		sdl.RenderFillRect(renderer, &bullet)
+		sdl.RenderCopy(renderer, assets.bullets[world.player.current_ammo], nil, &bullet)
 	}
 }
 
@@ -246,7 +248,7 @@ main :: proc() {
 		player_update(&game.world.player, keystate, delta_time)
 		player_fire_bullet(&game.world.player, &game.world.bullets, keystate)
 		bullet_update(&game.world.bullets, delta_time)
-		render_world(&game.world, game.renderer)
+		render_world(&game.world, &game.assets, game.renderer)
 		sdl.RenderPresent(game.renderer)
 	}
 }
