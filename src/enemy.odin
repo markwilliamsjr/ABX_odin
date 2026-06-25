@@ -1,5 +1,6 @@
 package main
 
+import "base:sanitizer"
 import "core:math"
 import "core:math/rand"
 import sdl "vendor:sdl2"
@@ -64,6 +65,18 @@ DiveType :: union {
 	Scatter_Dive,
 	Zigzag_Dive,
 	Sweep_Dive,
+}
+
+Bacteria :: struct {
+	hot:  [MAX_ENEMIES]BacteriaHot,
+	cold: [MAX_ENEMIES]BacteriaCold,
+}
+
+BacteriaSpawnParams :: struct {
+	speed_scalar:        f32,
+	path_data:           EntryPathData,
+	formation_posistion: sdl.FPoint,
+	species:             BacteriaSpecies,
 }
 
 BacteriaDefinition :: struct {
@@ -184,15 +197,8 @@ BACTERIA_DEFS := [BacteriaSpecies]BacteriaDefinition {
 	},
 }
 // ---- Init ----
-bacteria_init :: proc(
-	hot: ^BacteriaHot,
-	cold: ^BacteriaCold,
-	speed_scalar: f32,
-	path_data: EntryPathData,
-	formation_posistion: sdl.FPoint,
-	species: BacteriaSpecies,
-) {
-	bacteria_def := get_bacteria_def(species)
+bacteria_init :: proc(hot: ^BacteriaHot, cold: ^BacteriaCold, spawn_params: ^BacteriaSpawnParams) {
+	bacteria_def := get_bacteria_def(spawn_params.species)
 	hot.height = bacteria_def.height
 	hot.width = bacteria_def.width
 	hot.hb_height = bacteria_def.hb_height
@@ -201,20 +207,20 @@ bacteria_init :: proc(
 	hot.offset_y = bacteria_def.offset_y
 	hot.health = bacteria_def.health
 	hot.active = true
-	hot.species = species
-	hot.x = path_data.control_points[0].x
-	hot.y = path_data.control_points[0].y
+	hot.species = spawn_params.species
+	hot.x = spawn_params.path_data.control_points[0].x
+	hot.y = spawn_params.path_data.control_points[0].y
 	hot.current_frame = int(rand.int31()) % bacteria_def.frame_count
 	hot.animation_timer = 0.0
 	hot.angle = 0.0
 
-	cold.speed_scalar = speed_scalar
+	cold.speed_scalar = spawn_params.speed_scalar
 	cold.speed = f32(bacteria_def.base_speed) * cold.speed_scalar
 	cold.state_start_time = 0.0
 	cold.bacteria_state = .Entering
 	cold.t = 0.0
-	cold.entry_path = path_data
-	cold.formation_point = formation_posistion
+	cold.entry_path = spawn_params.path_data
+	cold.formation_point = spawn_params.formation_posistion
 	cold.dive_initialized = false
 	cold.return_initialized = false
 	cold.should_flee = false
@@ -344,5 +350,22 @@ bacteria_dive_update :: proc(
 // ---- Helper ----
 get_bacteria_def :: proc(bacteria_species: BacteriaSpecies) -> ^BacteriaDefinition {
 	return &BACTERIA_DEFS[bacteria_species]
+}
+
+find_free_bacteria_slot :: proc(bacteria: ^Bacteria) -> int {
+	for i in 0 ..< MAX_ENEMIES {
+		if !bacteria.hot[i].active {
+			return i
+		}
+	}
+	return -1
+}
+
+bacteria_spawn :: proc(bacteria: ^Bacteria, spawn_params: ^BacteriaSpawnParams) {
+	index := find_free_bacteria_slot(bacteria)
+	if index == -1 {
+		return
+	}
+	bacteria_init(&bacteria.hot[index], &bacteria.cold[index], spawn_params)
 }
 

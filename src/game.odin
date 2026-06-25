@@ -29,9 +29,10 @@ Game :: struct {
 }
 
 World :: struct {
-	player:  Player,
-	bullets: Bullets,
-	state:   GameState,
+	player:   Player,
+	bullets:  Bullets,
+	bacteria: Bacteria,
+	state:    GameState,
 }
 
 Assets :: struct {
@@ -229,6 +230,7 @@ main :: proc() {
 	event: sdl.Event
 	last_time := sdl.GetTicks()
 	running := true
+	fps_timer: f32 = 0.0
 
 	// GAME LOOP
 
@@ -236,6 +238,12 @@ main :: proc() {
 		current_time := sdl.GetTicks()
 		delta_time := f32(current_time - last_time) / 1000.0
 		last_time = current_time
+
+		fps_timer += delta_time
+		if fps_timer >= 1.0 {
+			fmt.printfln("FPS: %.1f", 1.0 / delta_time)
+			fps_timer = 0.0
+		}
 
 		world_handle_events(&game.world, &event, &running)
 		keystate := sdl.GetKeyboardState(nil)
