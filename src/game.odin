@@ -87,7 +87,6 @@ game_init :: proc(game: ^Game) {
 world_init :: proc(world: ^World) {
 	world.state = .Menu
 	world.player = player_init(SCREEN_WIDTH, SCREEN_HEIGHT)
-
 }
 
 assets_init :: proc(asset: ^Assets, renderer: ^sdl.Renderer) {
@@ -138,6 +137,16 @@ texture_load :: proc(renderer: ^sdl.Renderer, path: string) -> ^sdl.Texture {
 	return texture
 }
 
+player_fire_bullet :: proc(player: ^Player, bullet: ^Bullets, keystate: [^]u8) {
+	if keystate[sdl.SCANCODE_SPACE] != 0 && !player.was_firing {
+		player.was_firing = true
+		bullet_spawn(bullet, player)
+	}
+	if keystate[sdl.SCANCODE_SPACE] == 0 {
+		player.was_firing = false
+	}
+}
+
 // ---- Render ----
 
 render_world :: proc(world: ^World, renderer: ^sdl.Renderer) {
@@ -154,6 +163,18 @@ render_world :: proc(world: ^World, renderer: ^sdl.Renderer) {
 		}
 		sdl.RenderDrawRect(renderer, &player)
 		sdl.RenderFillRect(renderer, &player)
+	}
+	for i in 0 ..< world.bullets.count {
+		wep_def := get_weapon_def(world.bullets.weapon_type[i])
+		sdl.SetRenderDrawColor(renderer, 255, 255, 0, 255)
+		bullet := sdl.Rect {
+			x = i32(world.bullets.x[i]),
+			y = i32(world.bullets.y[i]),
+			w = i32(wep_def.width),
+			h = i32(wep_def.height),
+		}
+		sdl.RenderDrawRect(renderer, &bullet)
+		sdl.RenderFillRect(renderer, &bullet)
 	}
 }
 
@@ -223,6 +244,8 @@ main :: proc() {
      */
 
 		player_update(&game.world.player, keystate, delta_time)
+		player_fire_bullet(&game.world.player, &game.world.bullets, keystate)
+		bullet_update(&game.world.bullets, delta_time)
 		render_world(&game.world, game.renderer)
 		sdl.RenderPresent(game.renderer)
 	}

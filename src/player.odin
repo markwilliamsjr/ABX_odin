@@ -8,6 +8,7 @@ Player :: struct {
 	width, height, hb_offset_x, hb_offset_y, hb_width, hb_height: int,
 	active:                                                       bool,
 	current_ammo:                                                 WeaponType,
+	was_firing:                                                   bool,
 }
 
 WeaponType :: enum {
