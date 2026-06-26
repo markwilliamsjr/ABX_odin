@@ -32,6 +32,7 @@ World :: struct {
 	player:   Player,
 	bullets:  Bullets,
 	bacteria: Bacteria,
+	level:    Level,
 	state:    GameState,
 }
 

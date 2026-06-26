@@ -37,12 +37,12 @@ WaveParams :: struct {
 	formation_params:                                          FormationParams,
 }
 
-// FormationDefinition :: struct {
-//	formation_type: FormationType,
-//	fits:           FormationFitsFn,
-//	sizes:          FormationSizeFn,
-//	generate:       FormationGenFn,
-//}
+BasicGenerationParams :: struct {
+	positions:   []sdl.FPoint,
+	count:       int,
+	min_spacing: f32,
+	bounds:      FormationBounds,
+}
 
 FormationParams :: union {
 	LineParams,
@@ -72,14 +72,12 @@ LineLayout :: struct {
 // ---- Init ----
 
 generate_formation :: proc(
-	positions: []sdl.FPoint,
-	count: int,
-	min_spacing: f32,
-	bounds: FormationBounds,
+	base: BasicGenerationParams,
 	params: FormationParams,
 ) -> FormationResult {
 	switch fp in params {
 	case LineParams:
+
 	case VParams:
 	case SemicircleParams:
 	}
@@ -251,36 +249,14 @@ compute_line_layout :: proc(
 	return line_layout
 }
 
-line_generate :: proc(
-	positions: []sdl.FPoint,
-	count: int,
-	min_spacing: f32,
-	bounds: FormationBounds,
-	params: LineParams,
-) -> FormationResult {
-	line_layout := compute_line_layout(bounds, params, min_spacing)
-	placed := min(count, line_layout.max_count)
-
-	rows_used := (placed + line_layout.cols - 1) / line_layout.cols
-	remainder := placed % line_layout.cols
-	full_rows := placed / line_layout.cols
-
-	v_step := bounds.height / f32(rows_used)
-
-	for i in 0 ..< placed {
-		row := i / line_layout.cols
-		col := i % line_layout.cols
-
-		cols_in_row := line_layout.cols
-		if row == full_rows && remainder > 0 {
-			cols_in_row = remainder
-		}
-
-		h_step := bounds.width / f32(cols_in_row)
-		positions[i].x = bounds.x + f32(col + 1) * h_step
-		positions[i].y = bounds.y + f32(row + 1) * v_step
+line_generate :: proc(base: BasicGenerationParams, params: LineParams) -> FormationResult {
+	line_layout := compute_line_layout(base.bounds, params, base.min_spacing)
+	placed := min(base.count, line_layout.max_count)
+	remaining := base.count - placed
+	result := FormationResult {
+		placed    = placed,
+		remaining = remaining,
 	}
-
-	return FormationResult{placed = placed, remaining = count - placed}
+	return result
 }
 
