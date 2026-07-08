@@ -368,4 +368,3 @@ bacteria_spawn :: proc(bacteria: ^Bacteria, spawn_params: ^BacteriaSpawnParams) 
 	}
 	bacteria_init(&bacteria.hot[index], &bacteria.cold[index], spawn_params)
 }
-

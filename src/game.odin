@@ -261,4 +261,3 @@ main :: proc() {
 		sdl.RenderPresent(game.renderer)
 	}
 }
-

@@ -143,4 +143,3 @@ bullet_remove :: proc(bullet: ^Bullets, index: int) {
 	bullet.weapon_type[index] = bullet.weapon_type[last]
 	bullet.count -= 1
 }
-

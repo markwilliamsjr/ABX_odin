@@ -77,7 +77,7 @@ generate_formation :: proc(
 ) -> FormationResult {
 	switch fp in params {
 	case LineParams:
-
+	    return line_generate(base, fp)
 	case VParams:
 	case SemicircleParams:
 	}
@@ -253,10 +253,30 @@ line_generate :: proc(base: BasicGenerationParams, params: LineParams) -> Format
 	line_layout := compute_line_layout(base.bounds, params, base.min_spacing)
 	placed := min(base.count, line_layout.max_count)
 	remaining := base.count - placed
+
+	rows_used := (placed + line_layout.cols - 1) / line_layout.cols
+	full_rows := placed / line_layout.cols
+	remainder := placed % line_layout.cols
+
+	v_step := base.bounds.height / f32(rows_used)
+
+	for i in 0 ..< placed {
+		row := i / line_layout.cols
+		col := i % line_layout.cols
+
+		cols_in_row := line_layout.cols
+		if row == full_rows && remainder > 0 {
+			cols_in_row = remainder
+		}
+
+		h_step := base.bounds.width / f32(cols_in_row)
+		base.positions[i].x = base.bounds.x + f32(col + 1) * h_step
+		base.positions[i].y = base.bounds.y + f32(row + 1) * v_step
+	}
+
 	result := FormationResult {
 		placed    = placed,
 		remaining = remaining,
 	}
 	return result
 }
-
