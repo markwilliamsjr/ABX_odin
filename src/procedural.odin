@@ -77,7 +77,7 @@ generate_formation :: proc(
 ) -> FormationResult {
 	switch fp in params {
 	case LineParams:
-	    return line_generate(base, fp)
+		return line_generate(base, fp)
 	case VParams:
 	case SemicircleParams:
 	}
