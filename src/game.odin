@@ -18,6 +18,7 @@ WEAPON_COUNT :: 50
 MAX_BULLETS :: 50
 MAX_ENEMIES :: 50
 MAX_WAVES :: 10
+MAX_REGIONS :: 4
 
 // ---- Types ----
 
@@ -89,6 +90,7 @@ game_init :: proc(game: ^Game) {
 world_init :: proc(world: ^World) {
 	world.state = .Menu
 	world.player = player_init(SCREEN_WIDTH, SCREEN_HEIGHT)
+	level_init(&world.bacteria, &world.level)
 }
 
 assets_init :: proc(asset: ^Assets, renderer: ^sdl.Renderer) {
@@ -161,6 +163,12 @@ render_world :: proc(world: ^World, assets: ^Assets, renderer: ^sdl.Renderer) {
 	sdl.SetRenderDrawColor(renderer, 0, 0, 0, 255)
 	sdl.RenderClear(renderer)
 
+	render_player(world, assets, renderer)
+	render_bullets(world, assets, renderer)
+	render_bacteria(world, assets, renderer)
+}
+
+render_player :: proc(world: ^World, assets: ^Assets, renderer: ^sdl.Renderer) {
 	if world.player.active {
 		player := sdl.Rect {
 			x = i32(world.player.x),
@@ -168,8 +176,12 @@ render_world :: proc(world: ^World, assets: ^Assets, renderer: ^sdl.Renderer) {
 			w = i32(world.player.width),
 			h = i32(world.player.height),
 		}
+		sdl.SetTextureBlendMode(assets.ships[world.player.current_ammo], .BLEND)
 		sdl.RenderCopy(renderer, assets.ships[world.player.current_ammo], nil, &player)
 	}
+}
+
+render_bullets :: proc(world: ^World, assets: ^Assets, renderer: ^sdl.Renderer) {
 	for i in 0 ..< world.bullets.count {
 		wep_def := get_weapon_def(world.bullets.weapon_type[i])
 		bullet := sdl.Rect {
@@ -179,6 +191,22 @@ render_world :: proc(world: ^World, assets: ^Assets, renderer: ^sdl.Renderer) {
 			h = i32(wep_def.height),
 		}
 		sdl.RenderCopy(renderer, assets.bullets[world.player.current_ammo], nil, &bullet)
+	}
+}
+
+render_bacteria :: proc(world: ^World, assets: ^Assets, renderer: ^sdl.Renderer) {
+	for i in 0 ..< MAX_ENEMIES {
+		if world.bacteria.hot[i].active {
+			bacteria_def := get_bacteria_def(world.bacteria.hot[i].species)
+			sdl.SetRenderDrawColor(renderer, bacteria_def.r, bacteria_def.g, bacteria_def.b, 255)
+			bacteria := sdl.Rect {
+				x = i32(world.bacteria.hot[i].x),
+				y = i32(world.bacteria.hot[i].y),
+				w = i32(world.bacteria.hot[i].width),
+				h = i32(world.bacteria.hot[i].height),
+			}
+			sdl.RenderFillRect(renderer, &bacteria)
+		}
 	}
 }
 
