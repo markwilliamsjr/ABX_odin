@@ -281,11 +281,13 @@ line_generate :: proc(base: BasicGenerationParams, params: LineParams) -> Format
 	return result
 }
 
-compute_formation_bounds :: proc(wp: ^WaveParams) -> FormationBounds {
-	return FormationBounds {
+compute_formation_bounds :: proc(wp: ^WaveParams) -> (regions: [MAX_REGIONS]FormationBounds, count: int ){
+	regions[0]= FormationBounds {
             x      = f32(SCREEN_WIDTH) * 0.1,
             y      = f32(SCREEN_HEIGHT) * 0.05,
             width  = f32(SCREEN_WIDTH) * 0.8,
             height = f32(SCREEN_HEIGHT) * 0.25,
 	}
+    count = 1
+    return
 }
