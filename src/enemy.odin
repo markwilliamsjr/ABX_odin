@@ -1,6 +1,5 @@
 package main
 
-import "base:sanitizer"
 import "core:math"
 import "core:math/rand"
 import sdl "vendor:sdl2"
@@ -345,6 +344,21 @@ bacteria_dive_update :: proc(
 	case Zigzag_Dive:
 	case Sweep_Dive:
 	}
+}
+
+bacteria_update :: proc(bacteria: ^Bacteria, delta_time: f32) {
+	for i in 0 ..< MAX_ENEMIES {
+		if !bacteria.hot[i].active do continue
+
+		switch bacteria.cold[i].bacteria_state {
+		case .Entering:
+		case .Holding:
+		case .Diving:
+		case .Returning:
+		case .Fleeing:
+		}
+	}
+
 }
 
 // ---- Helper ----
