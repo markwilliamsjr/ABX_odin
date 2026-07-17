@@ -352,6 +352,25 @@ bacteria_update :: proc(bacteria: ^Bacteria, delta_time: f32) {
 
 		switch bacteria.cold[i].bacteria_state {
 		case .Entering:
+			hot := &bacteria.hot
+			cold := &bacteria.cold
+
+			dx := cold[i].entry_path.control_points[3].x - cold[i].entry_path.control_points[0].x
+			dy := cold[i].entry_path.control_points[3].y - cold[i].entry_path.control_points[0].y
+			path_length := math.sqrt(dx * dx + dy * dy)
+			cold[i].t += (cold[i].speed * delta_time) / path_length
+
+			if cold[i].t >= 1.0 {
+				cold[i].bacteria_state = .Holding
+				cold[i].t = 1.0
+				cold[i].state_start_time = u64(sdl.GetTicks())
+				hot[i].x = cold[i].formation_point.x
+				hot[i].y = cold[i].formation_point.y
+			}
+
+			pos := bezier_calc(cold[i].entry_path, cold[i].t)
+			hot[i].x = pos.x
+			hot[i].y = pos.y
 		case .Holding:
 		case .Diving:
 		case .Returning:

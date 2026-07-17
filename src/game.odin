@@ -157,6 +157,27 @@ player_fire_bullet :: proc(player: ^Player, bullet: ^Bullets, keystate: [^]u8) {
 	}
 }
 
+bezier_calc :: proc(path_data: EntryPathData, t: f32) -> sdl.FPoint {
+	result: sdl.FPoint
+
+	one_minus_t := 1.0 - t
+	omt_2 := one_minus_t * one_minus_t
+	omt_3 := omt_2 * one_minus_t
+	t2 := t * t
+	t3 := t2 * t
+	result.x =
+		omt_3 * path_data.control_points[0].x +
+		3 * omt_2 * t * path_data.control_points[1].x +
+		3 * one_minus_t * t2 * path_data.control_points[2].x +
+		t3 * path_data.control_points[3].x
+	result.y =
+		omt_3 * path_data.control_points[0].y +
+		3 * omt_2 * t * path_data.control_points[1].y +
+		3 * one_minus_t * t2 * path_data.control_points[2].y +
+		t3 * path_data.control_points[3].y
+	return result
+}
+
 // ---- Render ----
 
 render_world :: proc(world: ^World, assets: ^Assets, renderer: ^sdl.Renderer) {
