@@ -211,7 +211,7 @@ render_bullets :: proc(world: ^World, assets: ^Assets, renderer: ^sdl.Renderer) 
 			w = i32(wep_def.width),
 			h = i32(wep_def.height),
 		}
-		sdl.RenderCopy(renderer, assets.bullets[world.player.current_ammo], nil, &bullet)
+		sdl.RenderCopy(renderer, assets.bullets[world.bullets.weapon_type], nil, &bullet)
 	}
 }
 

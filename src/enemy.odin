@@ -288,8 +288,7 @@ bacteria_dive_update :: proc(
 	switch &dive in cold.dive_type {
 	case Sine_Dive:
 		dive.phase += dive.frequency * 2.0 * math.PI * delta_time
-		eased := math.sin(dive.phase)
-		hot.x += dive.start_x + eased + dive.amplitude
+		hot.x = dive.start_x + math.sin(dive.phase) * dive.amplitude
 		cycle_position := math.mod(dive.phase, 2.0 * math.PI) / (2.0 * math.PI)
 
 		if cycle_position < 0 do cycle_position += 1.0
@@ -394,10 +393,11 @@ find_free_bacteria_slot :: proc(bacteria: ^Bacteria) -> int {
 	return -1
 }
 
-bacteria_spawn :: proc(bacteria: ^Bacteria, spawn_params: ^BacteriaSpawnParams) {
+bacteria_spawn :: proc(bacteria: ^Bacteria, spawn_params: ^BacteriaSpawnParams) -> int {
 	index := find_free_bacteria_slot(bacteria)
 	if index == -1 {
-		return
+		return -1
 	}
 	bacteria_init(&bacteria.hot[index], &bacteria.cold[index], spawn_params)
+	return index
 }

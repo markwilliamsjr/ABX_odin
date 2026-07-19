@@ -53,7 +53,7 @@ wave_init :: proc(wp: ^WaveParams, bacteria: ^Bacteria, wave: ^Wave) {
 				formation_posistion = wave.formation_positions[placed_total + j],
 				species             = .Strep,
 			}
-			bacteria_spawn(bacteria, &bact_spawn_params)
+			wave.enemy_indices = bacteria_spawn(bacteria, &bact_spawn_params)
 		}
 		placed_total += result.placed
 	}
