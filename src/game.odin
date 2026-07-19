@@ -211,7 +211,7 @@ render_bullets :: proc(world: ^World, assets: ^Assets, renderer: ^sdl.Renderer) 
 			w = i32(wep_def.width),
 			h = i32(wep_def.height),
 		}
-		sdl.RenderCopy(renderer, assets.bullets[world.bullets.weapon_type], nil, &bullet)
+		sdl.RenderCopy(renderer, assets.bullets[world.bullets.weapon_type[i]], nil, &bullet)
 	}
 }
 
@@ -255,7 +255,6 @@ game_cleanup :: proc(g: ^Game) {
 		assets_destroy(&g.assets)
 		if g.renderer != nil do sdl.DestroyRenderer(g.renderer)
 		if g.window != nil do sdl.DestroyWindow(g.window)
-		sdl.Quit()
 	}
 	sdl.Quit()
 }
@@ -306,6 +305,7 @@ main :: proc() {
 		player_update(&game.world.player, keystate, delta_time)
 		player_fire_bullet(&game.world.player, &game.world.bullets, keystate)
 		bullet_update(&game.world.bullets, delta_time)
+		bacteria_update(&game.world.bacteria, delta_time)
 		render_world(&game.world, &game.assets, game.renderer)
 		sdl.RenderPresent(game.renderer)
 	}

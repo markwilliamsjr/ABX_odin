@@ -215,7 +215,7 @@ bacteria_init :: proc(hot: ^BacteriaHot, cold: ^BacteriaCold, spawn_params: ^Bac
 
 	cold.speed_scalar = spawn_params.speed_scalar
 	cold.speed = f32(bacteria_def.base_speed) * cold.speed_scalar
-	cold.state_start_time = 0.0
+	cold.state_start_time = 0
 	cold.bacteria_state = .Entering
 	cold.t = 0.0
 	cold.entry_path = spawn_params.path_data
@@ -262,10 +262,10 @@ bacteria_dive_init :: proc(hot: ^BacteriaHot, cold: ^BacteriaCold, player_x: f32
 		cps[0] = {hot.x, hot.y}
 		cps[1] = {hot.x, hot.y + 500}
 		if hot.x >= f32(SCREEN_WIDTH) / 2 {
-			cps[2] = {f32(SCREEN_WIDTH) * 0.25, f32(SCREEN_WIDTH) * 0.9}
+			cps[2] = {f32(SCREEN_WIDTH) * 0.25, f32(SCREEN_HEIGHT) * 0.9}
 			cps[3] = {0, f32(SCREEN_HEIGHT) + f32(hot.height)}
 		} else {
-			cps[2] = {f32(SCREEN_WIDTH) * 0.75, f32(SCREEN_WIDTH) * 0.9}
+			cps[2] = {f32(SCREEN_WIDTH) * 0.75, f32(SCREEN_HEIGHT) * 0.9}
 			cps[3] = {f32(SCREEN_WIDTH), f32(SCREEN_HEIGHT) + f32(hot.height)}
 		}
 		cold.dive_type = Sweep_Dive {
@@ -307,7 +307,7 @@ bacteria_dive_update :: proc(
 			cold.bacteria_state = .Returning
 			cold.dive_initialized = false
 			cold.return_start_point = {hot.x, 0 - f32(hot.height)}
-			cold.t = 0
+			cold.t = 0.0
 		}
 
 	case Scatter_Dive:
@@ -324,7 +324,7 @@ bacteria_dive_update :: proc(
 			dive.timer += delta_time
 			if dive.timer >= dive.burst_pause {
 				dive.phase = .Diving
-				dive.target_x = player_x + (rand.float32() * 0.5) * 200.0
+				dive.target_x = player_x + (rand.float32() - 0.5) * 200.0
 			}
 		} else if dive.phase == .Diving {
 			diff := dive.target_x - hot.x

@@ -38,7 +38,7 @@ WaveParams :: struct {
 }
 
 BasicGenerationParams :: struct {
-	positions:   []sdl.FPoint,
+	positions:   ^[MAX_ENEMIES]sdl.FPoint,
 	count:       int,
 	min_spacing: f32,
 	bounds:      FormationBounds,
@@ -72,7 +72,7 @@ LineLayout :: struct {
 // ---- Init ----
 
 generate_formation :: proc(
-	base: BasicGenerationParams,
+	base: ^BasicGenerationParams,
 	params: FormationParams,
 ) -> FormationResult {
 	switch fp in params {
@@ -249,7 +249,7 @@ compute_line_layout :: proc(
 	return line_layout
 }
 
-line_generate :: proc(base: BasicGenerationParams, params: LineParams) -> FormationResult {
+line_generate :: proc(base: ^BasicGenerationParams, params: LineParams) -> FormationResult {
 	line_layout := compute_line_layout(base.bounds, params, base.min_spacing)
 	placed := min(base.count, line_layout.max_count)
 	remaining := base.count - placed
@@ -258,7 +258,7 @@ line_generate :: proc(base: BasicGenerationParams, params: LineParams) -> Format
 	full_rows := placed / line_layout.cols
 	remainder := placed % line_layout.cols
 
-	v_step := base.bounds.height / f32(rows_used)
+	v_step := base.bounds.height / f32(rows_used + 1)
 
 	for i in 0 ..< placed {
 		row := i / line_layout.cols
@@ -269,7 +269,7 @@ line_generate :: proc(base: BasicGenerationParams, params: LineParams) -> Format
 			cols_in_row = remainder
 		}
 
-		h_step := base.bounds.width / f32(cols_in_row)
+		h_step := base.bounds.width / f32(cols_in_row + 1)
 		base.positions[i].x = base.bounds.x + f32(col + 1) * h_step
 		base.positions[i].y = base.bounds.y + f32(row + 1) * v_step
 	}
@@ -281,13 +281,18 @@ line_generate :: proc(base: BasicGenerationParams, params: LineParams) -> Format
 	return result
 }
 
-compute_formation_bounds :: proc(wp: ^WaveParams) -> (regions: [MAX_REGIONS]FormationBounds, count: int ){
-	regions[0]= FormationBounds {
-            x      = f32(SCREEN_WIDTH) * 0.1,
-            y      = f32(SCREEN_HEIGHT) * 0.05,
-            width  = f32(SCREEN_WIDTH) * 0.8,
-            height = f32(SCREEN_HEIGHT) * 0.25,
+compute_formation_bounds :: proc(
+	wp: ^WaveParams,
+) -> (
+	regions: [MAX_REGIONS]FormationBounds,
+	count: int,
+) {
+	regions[0] = FormationBounds {
+		x      = f32(SCREEN_WIDTH) * 0.1,
+		y      = f32(SCREEN_HEIGHT) * 0.05,
+		width  = f32(SCREEN_WIDTH) * 0.8,
+		height = f32(SCREEN_HEIGHT) * 0.25,
 	}
-    count = 1
-    return
+	count = 1
+	return
 }

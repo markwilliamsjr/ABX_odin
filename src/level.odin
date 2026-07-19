@@ -13,7 +13,7 @@ Wave :: struct {
 	is_active, formation_complete, threshold_crossed:                          bool,
 	formation_complete_time:                                                   u64,
 	control_points:                                                            [3]sdl.FPoint,
-	formation_positions:                                                       [MAX_ENEMIES]sdl.FPoint,
+	formation_positions:                                                       [MAX_REGIONS][MAX_ENEMIES]sdl.FPoint,
 }
 
 Level :: struct {
@@ -34,9 +34,9 @@ wave_init :: proc(wp: ^WaveParams, bacteria: ^Bacteria, wave: ^Wave) {
 			bounds      = region[i],
 			min_spacing = 5.0,
 			count       = wp.total_enemies,
-			positions   = wave.formation_positions[placed_total:],
+			positions   = &wave.formation_positions[i],
 		}
-		result := generate_formation(base, wp.formation_params)
+		result := generate_formation(&base, wp.formation_params)
 
 		for j in 0 ..< result.placed {
 			start := sdl.FPoint {
@@ -48,12 +48,12 @@ wave_init :: proc(wp: ^WaveParams, bacteria: ^Bacteria, wave: ^Wave) {
 				path_data           = generate_entry_path(
 					wp.path_type,
 					start,
-					wave.formation_positions[placed_total + j],
+					wave.formation_positions[i][j],
 				),
-				formation_posistion = wave.formation_positions[placed_total + j],
+				formation_posistion = wave.formation_positions[i][j],
 				species             = .Strep,
 			}
-			wave.enemy_indices = bacteria_spawn(bacteria, &bact_spawn_params)
+			wave.enemy_indices[placed_total + j] = bacteria_spawn(bacteria, &bact_spawn_params)
 		}
 		placed_total += result.placed
 	}
