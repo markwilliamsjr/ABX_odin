@@ -44,14 +44,14 @@ wave_init :: proc(wp: ^WaveParams, bacteria: ^Bacteria, wave: ^Wave) {
 				y = -50,
 			}
 			bact_spawn_params := BacteriaSpawnParams {
-				speed_scalar        = wp.speed_scalar,
-				path_data           = generate_entry_path(
+				speed_scalar       = wp.speed_scalar,
+				path_data          = generate_entry_path(
 					wp.path_type,
 					start,
 					wave.formation_positions[i][j],
 				),
-				formation_posistion = wave.formation_positions[i][j],
-				species             = .Strep,
+				formation_position = wave.formation_positions[i][j],
+				species            = .Strep,
 			}
 			wave.enemy_indices[placed_total + j] = bacteria_spawn(bacteria, &bact_spawn_params)
 		}

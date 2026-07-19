@@ -72,10 +72,10 @@ Bacteria :: struct {
 }
 
 BacteriaSpawnParams :: struct {
-	speed_scalar:        f32,
-	path_data:           EntryPathData,
-	formation_posistion: sdl.FPoint,
-	species:             BacteriaSpecies,
+	speed_scalar:       f32,
+	path_data:          EntryPathData,
+	formation_position: sdl.FPoint,
+	species:            BacteriaSpecies,
 }
 
 BacteriaDefinition :: struct {
@@ -219,7 +219,7 @@ bacteria_init :: proc(hot: ^BacteriaHot, cold: ^BacteriaCold, spawn_params: ^Bac
 	cold.bacteria_state = .Entering
 	cold.t = 0.0
 	cold.entry_path = spawn_params.path_data
-	cold.formation_point = spawn_params.formation_posistion
+	cold.formation_point = spawn_params.formation_position
 	cold.dive_initialized = false
 	cold.return_initialized = false
 	cold.should_flee = false
