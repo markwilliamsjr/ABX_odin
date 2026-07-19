@@ -330,7 +330,7 @@ bacteria_dive_update :: proc(
 			diff := dive.target_x - hot.x
 			if diff > 1.0 {
 				hot.x += dive.burst_speed * 0.3 * delta_time
-			} else if diff < 1.0 {
+			} else if diff < -1.0 {
 				hot.x -= dive.burst_speed * 0.3 * delta_time
 			}
 			hot.y += delta_time * dive.burst_speed
