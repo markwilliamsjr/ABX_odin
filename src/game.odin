@@ -117,7 +117,7 @@ world_handle_events :: proc(world: ^World, event: ^sdl.Event, running: ^bool) {
 		if event.type == .WINDOWEVENT && event.window.event == .CLOSE {
 			running^ = false
 		}
-		if event.type == .KEYDOWN && event.key.keysym.sym == .p {
+		if event.type == .KEYDOWN && event.key.keysym.sym == .ESCAPE {
 			running^ = false
 		}
 	}
