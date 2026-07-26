@@ -129,7 +129,7 @@ BACTERIA_DEFS := [BacteriaSpecies]BacteriaDefinition {
 		g = 200,
 		b = 0,
 		health = 6,
-		base_speed = 300.0,
+		base_speed = 400.0,
 		width = 32,
 		height = 64,
 		hb_width = 22,
@@ -345,7 +345,7 @@ bacteria_dive_update :: proc(
 	}
 }
 
-bacteria_update :: proc(bacteria: ^Bacteria, delta_time: f32) {
+bacteria_update :: proc(bacteria: ^Bacteria, delta_time: f32, player_x: f32) {
 	for i in 0 ..< MAX_ENEMIES {
 		if !bacteria.hot[i].active do continue
 
@@ -372,6 +372,14 @@ bacteria_update :: proc(bacteria: ^Bacteria, delta_time: f32) {
 			hot[i].y = pos.y
 		case .Holding:
 		case .Diving:
+			hot := &bacteria.hot
+			cold := &bacteria.cold
+			if !bacteria.cold[i].dive_initialized {
+				bacteria_dive_init(&hot[i], &cold[i], player_x)
+				bacteria.cold[i].dive_initialized = true
+			}
+			bacteria_dive_update(&hot[i], &cold[i], delta_time, player_x)
+
 		case .Returning:
 		case .Fleeing:
 		}
