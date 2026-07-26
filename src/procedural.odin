@@ -328,10 +328,11 @@ select_random_diver :: proc(wave: ^Wave, bacteria: ^Bacteria) -> int {
 select_diver :: proc(wave: ^Wave, bacteria: ^Bacteria) -> int {
 	switch wave.diver_selection_rule {
 	case .First_Found:
-		select_first_found(wave, bacteria)
+		return select_first_found(wave, bacteria)
 	case .Edges:
 		select_edges_first(wave, bacteria)
 	case .Random:
-		select_random_diver(wave, bacteria)
+		return select_random_diver(wave, bacteria)
 	}
+	return -1
 }
