@@ -32,7 +32,7 @@ ENTRY_POINTS := [ENTRY_POINT_COUNT]sdl.FPoint {
 
 
 Wave :: struct {
-	level, total_enemies, spawn_count, species_unlocked:                       int,
+	level, total_enemies, spawn_count, species_unlocked, max_simult_divers:    int,
 	threshold, spawn_delay, spawn_timer, dive_delay, dive_timer, speed_scalar: f32,
 	path:                                                                      PathType,
 	enemy_indices:                                                             [MAX_ENEMIES]int,
@@ -43,6 +43,7 @@ Wave :: struct {
 	region_start:                                                              [MAX_REGIONS]sdl.FPoint,
 	region_count:                                                              [MAX_REGIONS]int,
 	spawn_region, spawn_index:                                                 int,
+	diver_selection_rule:                                                      DiverSelectionRule,
 }
 
 Level :: struct {
@@ -84,6 +85,8 @@ wave_init :: proc(wp: ^WaveParams, wave: ^Wave) {
 	wave.spawn_delay = wp.spawn_delay
 	wave.is_active = true
 	wave.total_enemies = wp.total_enemies
+	wave.max_simult_divers = wp.max_simult_divers
+	wave.diver_selection_rule = wp.diver_selection_rule
 }
 
 level_init :: proc(bacteria: ^Bacteria, level: ^Level) {
@@ -118,4 +121,25 @@ wave_update :: proc(wave: ^Wave, bacteria: ^Bacteria, delta_time: f32) {
 	wave.enemy_indices[wave.spawn_count] = bacteria_spawn(bacteria, &params)
 	wave.spawn_index += 1
 	wave.spawn_count += 1
+}
+
+wave_dive_update :: proc(wave: ^Wave, bacteria: ^Bacteria, delta_time: f32) {
+	wave.dive_timer += delta_time
+	if wave.dive_delay > wave.dive_timer do return
+	wave.dive_timer -= wave.dive_delay
+
+	dive_count := 0
+	for i in 0 ..< wave.spawn_count {
+		idx := wave.enemy_indices[i]
+		if bacteria.cold[idx].bacteria_state == .Diving {
+			dive_count += 1
+		}
+	}
+	if dive_count >= wave.max_simult_divers {
+		return
+	}
+	idx := select_diver(wave, bacteria)
+	if idx != -1 {
+		bacteria.cold[idx].bacteria_state = .Diving
+	}
 }

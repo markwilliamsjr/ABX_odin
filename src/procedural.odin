@@ -15,6 +15,12 @@ PathType :: enum {
 	Loop_De_Loop,
 }
 
+DiverSelectionRule :: enum {
+	First_Found,
+	Edges,
+	Random,
+}
+
 FormationBounds :: struct {
 	x, y, width, height: f32,
 }
@@ -35,6 +41,7 @@ WaveParams :: struct {
 	speed_scalar, spawn_delay, dive_delay, threshold:          f32,
 	path_type:                                                 PathType,
 	formation_params:                                          FormationParams,
+	diver_selection_rule:                                      DiverSelectionRule,
 }
 
 BasicGenerationParams :: struct {
@@ -100,6 +107,7 @@ level_to_params :: proc(level: int) -> WaveParams {
 		threshold = 0.8,
 		path_type = .Line_Ish,
 		formation_params = LineParams{max_per_row = -1, row_spacing_fraction = 1.0},
+		diver_selection_rule = .First_Found,
 	}
 	wp.speed_scalar = 1.0 + f32(block_number) * 0.2 + f32(level_in_block) * 0.1
 	return wp
@@ -295,4 +303,35 @@ compute_formation_bounds :: proc(
 	}
 	count = 1
 	return
+}
+
+select_first_found :: proc(wave: ^Wave, bacteria: ^Bacteria) -> int {
+	for i in 0 ..< wave.spawn_count {
+		idx := wave.enemy_indices[i]
+		if bacteria.cold[idx].bacteria_state == .Holding {
+			return idx
+		}
+	}
+	return -1
+}
+
+select_edges_first :: proc(wave: ^Wave, bacteria: ^Bacteria) -> int {
+	return select_edges_first(wave, bacteria)
+	// TODO real selecting edge logic
+}
+
+select_random_diver :: proc(wave: ^Wave, bacteria: ^Bacteria) -> int {
+	return select_edges_first(wave, bacteria)
+	// TODO real selecting random logic
+}
+
+select_diver :: proc(wave: ^Wave, bacteria: ^Bacteria) -> int {
+	switch wave.diver_selection_rule {
+	case .First_Found:
+		select_first_found(wave, bacteria)
+	case .Edges:
+		select_edges_first(wave, bacteria)
+	case .Random:
+		select_random_diver(wave, bacteria)
+	}
 }
