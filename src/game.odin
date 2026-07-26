@@ -306,6 +306,7 @@ main :: proc() {
 		player_fire_bullet(&game.world.player, &game.world.bullets, keystate)
 		bullet_update(&game.world.bullets, delta_time)
 		bacteria_update(&game.world.bacteria, delta_time)
+		wave_update(&game.world.level.wave[0], &game.world.bacteria, delta_time)
 		render_world(&game.world, &game.assets, game.renderer)
 		sdl.RenderPresent(game.renderer)
 	}
