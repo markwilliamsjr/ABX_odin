@@ -38,8 +38,9 @@ World :: struct {
 }
 
 Assets :: struct {
-	ships:   [WeaponType]^sdl.Texture,
-	bullets: [WeaponType]^sdl.Texture,
+	ships:    [WeaponType]^sdl.Texture,
+	bullets:  [WeaponType]^sdl.Texture,
+	bacteria: [BacteriaSpecies]^sdl.Texture,
 }
 
 GameState :: enum {
@@ -98,11 +99,18 @@ assets_init :: proc(asset: ^Assets, renderer: ^sdl.Renderer) {
 		def := get_weapon_def(kind)
 		asset.ships[kind] = texture_load(renderer, def.ship_texture_path)
 		if asset.ships[kind] != nil {
-			fmt.printfln("Ship Texture Loaded")
+			fmt.println(kind, "Ship Loaded")
 		}
 		asset.bullets[kind] = texture_load(renderer, def.bullet_texture_path)
 		if asset.bullets[kind] != nil {
-			fmt.printfln("Bullet Texture Loaded")
+			fmt.println(kind, "Bullet Loaded")
+		}
+	}
+	for bacteria in BacteriaSpecies {
+		def := get_bacteria_def(bacteria)
+		asset.bacteria[bacteria] = texture_load(renderer, def.texture_path)
+		if asset.bacteria[bacteria] != nil {
+			fmt.println(bacteria, "Texture Loaded")
 		}
 	}
 }
@@ -217,16 +225,31 @@ render_bullets :: proc(world: ^World, assets: ^Assets, renderer: ^sdl.Renderer) 
 
 render_bacteria :: proc(world: ^World, assets: ^Assets, renderer: ^sdl.Renderer) {
 	for i in 0 ..< MAX_ENEMIES {
-		if world.bacteria.hot[i].active {
-			bacteria_def := get_bacteria_def(world.bacteria.hot[i].species)
-			sdl.SetRenderDrawColor(renderer, bacteria_def.r, bacteria_def.g, bacteria_def.b, 255)
-			bacteria := sdl.Rect {
-				x = i32(world.bacteria.hot[i].x),
-				y = i32(world.bacteria.hot[i].y),
-				w = i32(world.bacteria.hot[i].width),
-				h = i32(world.bacteria.hot[i].height),
+		if !world.bacteria.hot[i].active do continue
+
+		hot := world.bacteria.hot[i]
+
+		def := get_bacteria_def(hot.species)
+		texture := assets.bacteria[hot.species]
+
+		dst := sdl.Rect {
+			x = i32(hot.x),
+			y = i32(hot.y),
+			w = i32(hot.width),
+			h = i32(hot.height),
+		}
+
+		if texture != nil {
+			src := sdl.Rect {
+				x = i32(hot.current_frame) * i32(def.width),
+				y = 0,
+				w = i32(def.width),
+				h = i32(def.height),
 			}
-			sdl.RenderFillRect(renderer, &bacteria)
+			sdl.RenderCopyEx(renderer, texture, &src, &dst, f64(hot.angle), nil, .NONE)
+		} else {
+			sdl.SetRenderDrawColor(renderer, def.r, def.g, def.b, 255)
+			sdl.RenderFillRect(renderer, &dst)
 		}
 	}
 }
