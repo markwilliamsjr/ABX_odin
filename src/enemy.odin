@@ -349,6 +349,8 @@ bacteria_update :: proc(bacteria: ^Bacteria, delta_time: f32, player_x: f32) {
 	for i in 0 ..< MAX_ENEMIES {
 		if !bacteria.hot[i].active do continue
 
+		def := get_bacteria_def(bacteria.hot[i].species)
+		bacteria_animate(&bacteria.hot[i], def, delta_time)
 		switch bacteria.cold[i].bacteria_state {
 		case .Entering:
 			hot := &bacteria.hot
@@ -408,4 +410,14 @@ bacteria_spawn :: proc(bacteria: ^Bacteria, spawn_params: ^BacteriaSpawnParams) 
 	}
 	bacteria_init(&bacteria.hot[index], &bacteria.cold[index], spawn_params)
 	return index
+}
+
+bacteria_animate :: proc(hot: ^BacteriaHot, def: ^BacteriaDefinition, delta_time: f32) {
+	if def.frame_count <= 1 do return
+
+	hot.animation_timer += delta_time
+	for hot.animation_timer >= def.frame_duration {
+		hot.animation_timer -= def.frame_duration
+		hot.current_frame = (hot.current_frame + 1) % def.frame_count
+	}
 }
