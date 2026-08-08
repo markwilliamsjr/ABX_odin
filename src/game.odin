@@ -165,6 +165,8 @@ player_fire_bullet :: proc(player: ^Player, bullet: ^Bullets, keystate: [^]u8) {
 	}
 }
 
+// ---- Math ----
+
 bezier_calc :: proc(path_data: EntryPathData, t: f32) -> sdl.FPoint {
 	result: sdl.FPoint
 
@@ -183,6 +185,25 @@ bezier_calc :: proc(path_data: EntryPathData, t: f32) -> sdl.FPoint {
 		3 * omt_2 * t * path_data.control_points[1].y +
 		3 * one_minus_t * t2 * path_data.control_points[2].y +
 		t3 * path_data.control_points[3].y
+	return result
+}
+
+bezier_tangent :: proc(path_data: EntryPathData, t: f32) -> sdl.FPoint {
+	points := path_data.control_points
+	result: sdl.FPoint
+	u := 1.0 - t
+	uu := u * u
+	tt := t * t
+	ut6 := 6.0 * u * t
+
+	result.x =
+		3.0 * uu * (points[1].x - points[0].x) +
+		ut6 * (points[2].x - points[1].x) +
+		3.0 * tt * (points[3].x - points[2].x)
+	result.y =
+		3.0 * uu * (points[1].y - points[0].y) +
+		ut6 * (points[2].y - points[1].y) +
+		3.0 * tt * (points[3].y - points[2].y)
 	return result
 }
 

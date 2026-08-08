@@ -277,6 +277,36 @@ bacteria_dive_init :: proc(hot: ^BacteriaHot, cold: ^BacteriaCold, player_x: f32
 
 // ---- Update ----
 
+bacteria_enter_update :: proc(hot: ^BacteriaHot, cold: ^BacteriaCold, delta_time: f32) {
+	bacteria_def := get_bacteria_def(hot.species)
+
+	switch hot.species {
+	case .Strep:
+		dx := cold.entry_path.control_points[3].x - cold.entry_path.control_points[0].x
+		dy := cold.entry_path.control_points[3].y - cold.entry_path.control_points[0].y
+		path_length := math.sqrt(dx * dx + dy * dy)
+		cold.t += (cold.speed * delta_time) / path_length
+
+		if cold.t >= 1.0 {
+			cold.bacteria_state = .Holding
+			cold.t = 1.0
+			cold.state_start_time = u64(sdl.GetTicks())
+			hot.x = cold.formation_point.x
+			hot.y = cold.formation_point.y
+		}
+		tangent := bezier_tangent(cold.entry_path, cold.t)
+		hot.angle = math.atan2_f32(tangent.y, tangent.x) * (180.0 / math.PI) - 90.0
+
+		pos := bezier_calc(cold.entry_path, cold.t)
+		hot.x = pos.x
+		hot.y = pos.y
+	case .Staph:
+	case .Ecoli:
+	case .Pseudomonas:
+	}
+
+}
+
 bacteria_dive_update :: proc(
 	hot: ^BacteriaHot,
 	cold: ^BacteriaCold,
@@ -302,6 +332,7 @@ bacteria_dive_update :: proc(
 			math.atan2(dive.dive_speed, math.cos(dive.phase) * dive.amplitude * dive.frequency) *
 				(180.0 / math.PI) -
 			90
+
 
 		if hot.y > SCREEN_HEIGHT {
 			cold.bacteria_state = .Returning
@@ -349,39 +380,23 @@ bacteria_update :: proc(bacteria: ^Bacteria, delta_time: f32, player_x: f32) {
 	for i in 0 ..< MAX_ENEMIES {
 		if !bacteria.hot[i].active do continue
 
+		hot := &bacteria.hot
+		cold := &bacteria.cold
+
 		def := get_bacteria_def(bacteria.hot[i].species)
-		bacteria_animate(&bacteria.hot[i], def, delta_time)
+		bacteria_animate(&hot[i], def, delta_time)
+
 		switch bacteria.cold[i].bacteria_state {
 		case .Entering:
-			hot := &bacteria.hot
-			cold := &bacteria.cold
-
-			dx := cold[i].entry_path.control_points[3].x - cold[i].entry_path.control_points[0].x
-			dy := cold[i].entry_path.control_points[3].y - cold[i].entry_path.control_points[0].y
-			path_length := math.sqrt(dx * dx + dy * dy)
-			cold[i].t += (cold[i].speed * delta_time) / path_length
-
-			if cold[i].t >= 1.0 {
-				cold[i].bacteria_state = .Holding
-				cold[i].t = 1.0
-				cold[i].state_start_time = u64(sdl.GetTicks())
-				hot[i].x = cold[i].formation_point.x
-				hot[i].y = cold[i].formation_point.y
-			}
-
-			pos := bezier_calc(cold[i].entry_path, cold[i].t)
-			hot[i].x = pos.x
-			hot[i].y = pos.y
+			bacteria_enter_update(&hot[i], &cold[i], delta_time)
 		case .Holding:
+			hot[i].angle = hot[i].angle + (0.0 - hot[i].angle) * (delta_time * 3.0)
 		case .Diving:
-			hot := &bacteria.hot
-			cold := &bacteria.cold
 			if !bacteria.cold[i].dive_initialized {
 				bacteria_dive_init(&hot[i], &cold[i], player_x)
 				bacteria.cold[i].dive_initialized = true
 			}
 			bacteria_dive_update(&hot[i], &cold[i], delta_time, player_x)
-
 		case .Returning:
 		case .Fleeing:
 		}
