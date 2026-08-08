@@ -87,6 +87,7 @@ wave_init :: proc(wp: ^WaveParams, wave: ^Wave) {
 	wave.total_enemies = wp.total_enemies
 	wave.max_simult_divers = wp.max_simult_divers
 	wave.diver_selection_rule = wp.diver_selection_rule
+	wave.formation_complete = false
 }
 
 level_init :: proc(bacteria: ^Bacteria, level: ^Level) {
@@ -96,50 +97,68 @@ level_init :: proc(bacteria: ^Bacteria, level: ^Level) {
 
 // ---- Update ----
 wave_update :: proc(wave: ^Wave, bacteria: ^Bacteria, delta_time: f32) {
-	if wave.spawn_count >= wave.total_enemies do return
+	if wave.spawn_count < wave.total_enemies {
+		wave.spawn_timer += delta_time
+		if wave.spawn_delay > wave.spawn_timer do return
 
-	wave.spawn_timer += delta_time
-	if wave.spawn_delay > wave.spawn_timer do return
+		wave.spawn_timer -= wave.spawn_delay
 
-	wave.spawn_timer -= wave.spawn_delay
+		for wave.spawn_index >= wave.region_count[wave.spawn_region] {
+			wave.spawn_region += 1
+			wave.spawn_index = 0
+		}
 
-	for wave.spawn_index >= wave.region_count[wave.spawn_region] {
-		wave.spawn_region += 1
-		wave.spawn_index = 0
+		start := wave.region_start[wave.spawn_region]
+		destination := wave.formation_positions[wave.spawn_region][wave.spawn_index]
+		path_data := generate_entry_path(wave.path, start, destination)
+
+		params := BacteriaSpawnParams {
+			speed_scalar       = wave.speed_scalar,
+			path_data          = path_data,
+			formation_position = destination,
+			species            = .Strep,
+		}
+		wave.enemy_indices[wave.spawn_count] = bacteria_spawn(bacteria, &params)
+		wave.spawn_index += 1
+		wave.spawn_count += 1
 	}
 
-	start := wave.region_start[wave.spawn_region]
-	destination := wave.formation_positions[wave.spawn_region][wave.spawn_index]
-	path_data := generate_entry_path(wave.path, start, destination)
-
-	params := BacteriaSpawnParams {
-		speed_scalar       = wave.speed_scalar,
-		path_data          = path_data,
-		formation_position = destination,
-		species            = .Strep,
+	// Check if holding
+	if wave.spawn_count == wave.total_enemies && !wave.formation_complete {
+		all_holding := true
+		for i in 0 ..< wave.spawn_count {
+			if bacteria.cold[wave.enemy_indices[i]].bacteria_state != .Holding {
+				all_holding = false
+				break
+			}
+		}
+		if all_holding {
+			wave.formation_complete = true
+			wave.formation_complete_time = u64(sdl.GetTicks())
+		}
 	}
-	wave.enemy_indices[wave.spawn_count] = bacteria_spawn(bacteria, &params)
-	wave.spawn_index += 1
-	wave.spawn_count += 1
 }
 
 wave_dive_update :: proc(wave: ^Wave, bacteria: ^Bacteria, delta_time: f32) {
+	if !wave.formation_complete do return
+
 	wave.dive_timer += delta_time
 	if wave.dive_delay > wave.dive_timer do return
-	wave.dive_timer -= wave.dive_delay
 
-	dive_count := 0
-	for i in 0 ..< wave.spawn_count {
-		idx := wave.enemy_indices[i]
-		if bacteria.cold[idx].bacteria_state == .Diving {
-			dive_count += 1
+	if u64(sdl.GetTicks()) >= wave.formation_complete_time {
+		divers_count := 0
+		for i in 0 ..< wave.spawn_count {
+			idx := wave.enemy_indices[i]
+			if bacteria.cold[idx].bacteria_state == .Diving {
+				divers_count += 1
+			}
 		}
-	}
-	if dive_count >= wave.max_simult_divers {
-		return
-	}
-	idx := select_diver(wave, bacteria)
-	if idx != -1 {
-		bacteria.cold[idx].bacteria_state = .Diving
+		if divers_count >= wave.max_simult_divers {
+			return
+		}
+		idx := select_diver(wave, bacteria)
+		if idx != -1 {
+			bacteria.cold[idx].bacteria_state = .Diving
+		}
 	}
 }

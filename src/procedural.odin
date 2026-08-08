@@ -316,12 +316,14 @@ select_first_found :: proc(wave: ^Wave, bacteria: ^Bacteria) -> int {
 }
 
 select_edges_first :: proc(wave: ^Wave, bacteria: ^Bacteria) -> int {
-	return select_edges_first(wave, bacteria)
+	return select_first_found(wave, bacteria)
 	// TODO real selecting edge logic
 }
 
 select_random_diver :: proc(wave: ^Wave, bacteria: ^Bacteria) -> int {
-	return select_edges_first(wave, bacteria)
+	divers_count := 0
+	potental_divers: [dynamic]int
+	return select_first_found(wave, bacteria)
 	// TODO real selecting random logic
 }
 
@@ -330,7 +332,7 @@ select_diver :: proc(wave: ^Wave, bacteria: ^Bacteria) -> int {
 	case .First_Found:
 		return select_first_found(wave, bacteria)
 	case .Edges:
-		select_edges_first(wave, bacteria)
+		return select_edges_first(wave, bacteria)
 	case .Random:
 		return select_random_diver(wave, bacteria)
 	}
