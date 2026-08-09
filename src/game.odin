@@ -1,6 +1,7 @@
 package main
 
 import "core:fmt"
+import "core:math"
 import "core:os"
 import "core:strings"
 import sdl "vendor:sdl2"
@@ -188,7 +189,7 @@ bezier_calc :: proc(path_data: EntryPathData, t: f32) -> sdl.FPoint {
 	return result
 }
 
-bezier_tangent :: proc(path_data: EntryPathData, t: f32) -> sdl.FPoint {
+calculate_bezier_angle :: proc(path_data: EntryPathData, t: f32) -> f32 {
 	points := path_data.control_points
 	result: sdl.FPoint
 	u := 1.0 - t
@@ -204,7 +205,22 @@ bezier_tangent :: proc(path_data: EntryPathData, t: f32) -> sdl.FPoint {
 		3.0 * uu * (points[1].y - points[0].y) +
 		ut6 * (points[2].y - points[1].y) +
 		3.0 * tt * (points[3].y - points[2].y)
-	return result
+
+	return math.atan2_f32(result.y, result.x) * (180.0 / math.PI) - 90.0
+}
+
+estimate_bezier_arc_length :: proc(path: EntryPathData, samples: int = 20) -> f32 {
+	length := 0.0
+	prev := bezier_calc(path, 0)
+	for i in 1 ..= samples {
+		t := f32(i) / f32(samples)
+		pt := bezier_calc(path, t)
+		dx := pt.x - prev.x
+		dy := pt.y - prev.y
+		length += math.sqrt_f64(f64(dx * dx + dy * dy))
+		prev = pt
+	}
+	return f32(length)
 }
 
 // ---- Render ----

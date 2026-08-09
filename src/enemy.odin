@@ -110,6 +110,7 @@ BacteriaHot :: struct {
 BacteriaCold :: struct {
 	bacteria_state:                                    BacteriaState,
 	entry_path:                                        EntryPathData,
+	entry_path_length:                                 f32,
 	dive_type:                                         DiveType,
 	current_segment:                                   int,
 	pause_timer:                                       f32,
@@ -225,6 +226,15 @@ bacteria_init :: proc(hot: ^BacteriaHot, cold: ^BacteriaCold, spawn_params: ^Bac
 	cold.should_flee = false
 	cold.current_segment = 0
 	cold.pause_timer = 0.0
+
+	switch hot.species {
+	case .Strep:
+		cold.entry_path_length = estimate_bezier_arc_length(cold.entry_path)
+	case .Staph:
+	case .Ecoli:
+	case .Pseudomonas:
+	}
+
 }
 
 bacteria_dive_init :: proc(hot: ^BacteriaHot, cold: ^BacteriaCold, player_x: f32) {
@@ -282,10 +292,7 @@ bacteria_enter_update :: proc(hot: ^BacteriaHot, cold: ^BacteriaCold, delta_time
 
 	switch hot.species {
 	case .Strep:
-		dx := cold.entry_path.control_points[3].x - cold.entry_path.control_points[0].x
-		dy := cold.entry_path.control_points[3].y - cold.entry_path.control_points[0].y
-		path_length := math.sqrt(dx * dx + dy * dy)
-		cold.t += (cold.speed * delta_time) / path_length
+		cold.t += (cold.speed * delta_time) / cold.entry_path_length
 
 		if cold.t >= 1.0 {
 			cold.bacteria_state = .Holding
@@ -294,17 +301,29 @@ bacteria_enter_update :: proc(hot: ^BacteriaHot, cold: ^BacteriaCold, delta_time
 			hot.x = cold.formation_point.x
 			hot.y = cold.formation_point.y
 		}
-		tangent := bezier_tangent(cold.entry_path, cold.t)
-		hot.angle = math.atan2_f32(tangent.y, tangent.x) * (180.0 / math.PI) - 90.0
 
 		pos := bezier_calc(cold.entry_path, cold.t)
 		hot.x = pos.x
 		hot.y = pos.y
+
+		hot.angle = calculate_bezier_angle(cold.entry_path, cold.t)
+
 	case .Staph:
 	case .Ecoli:
 	case .Pseudomonas:
 	}
+}
 
+bacteria_hold_update :: proc(hot: ^BacteriaHot, cold: ^BacteriaCold, delta_time: f32) {
+	bacteria_def := get_bacteria_def(hot.species)
+
+	switch hot.species {
+	case .Strep:
+		hot.angle = hot.angle + (0.0 - hot.angle) * (delta_time * 2.0)
+	case .Staph:
+	case .Ecoli:
+	case .Pseudomonas:
+	}
 }
 
 bacteria_dive_update :: proc(
@@ -390,7 +409,7 @@ bacteria_update :: proc(bacteria: ^Bacteria, delta_time: f32, player_x: f32) {
 		case .Entering:
 			bacteria_enter_update(&hot[i], &cold[i], delta_time)
 		case .Holding:
-			hot[i].angle = hot[i].angle + (0.0 - hot[i].angle) * (delta_time * 3.0)
+			bacteria_hold_update(&hot[i], &cold[i], delta_time)
 		case .Diving:
 			if !bacteria.cold[i].dive_initialized {
 				bacteria_dive_init(&hot[i], &cold[i], player_x)
