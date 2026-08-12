@@ -117,7 +117,7 @@ BacteriaCold :: struct {
 	state_start_time:                                  u64,
 	t, speed, speed_scalar:                            f32,
 	dive_initialized, return_initialized, should_flee: bool,
-	formation_point, return_start_point:               sdl.FPoint,
+	formation_point, return_start_points:              sdl.FPoint,
 }
 
 // ---- Definitions / Table ----
@@ -285,6 +285,21 @@ bacteria_dive_init :: proc(hot: ^BacteriaHot, cold: ^BacteriaCold, player_x: f32
 	}
 }
 
+bacteria_return_init :: proc(hot: ^BacteriaHot, cold: ^BacteriaCold, delta_time: f32) {
+	switch hot.species {
+	case .Strep:
+		cold.entry_path = generate_entry_path(
+			.Line_Ish,
+			cold.return_start_points,
+			cold.formation_point,
+		)
+		cold.entry_path_length = estimate_bezier_arc_length(cold.entry_path)
+	case .Staph:
+	case .Ecoli:
+	case .Pseudomonas:
+	}
+}
+
 // ---- Update ----
 
 bacteria_enter_update :: proc(hot: ^BacteriaHot, cold: ^BacteriaCold, delta_time: f32) {
@@ -356,7 +371,7 @@ bacteria_dive_update :: proc(
 		if hot.y > SCREEN_HEIGHT {
 			cold.bacteria_state = .Returning
 			cold.dive_initialized = false
-			cold.return_start_point = {hot.x, 0 - f32(hot.height)}
+			cold.return_start_points = {hot.x, 0 - f32(hot.height)}
 			cold.t = 0.0
 		}
 
@@ -395,28 +410,56 @@ bacteria_dive_update :: proc(
 	}
 }
 
+bacteria_return_update :: proc(hot: ^BacteriaHot, cold: ^BacteriaCold, delta_time: f32) {
+	switch hot.species {
+	case .Strep:
+		cold.t += (cold.speed * delta_time) / cold.entry_path_length
+
+		if cold.t >= 1.0 {
+			cold.bacteria_state = .Holding
+			cold.t = 1.0
+			cold.state_start_time = u64(sdl.GetTicks())
+			hot.x = cold.formation_point.x
+			hot.y = cold.formation_point.y
+		}
+		pos := bezier_calc(cold.entry_path, cold.t)
+		hot.x = pos.x
+		hot.y = pos.y
+
+		hot.angle = calculate_bezier_angle(cold.entry_path, cold.t)
+	case .Staph:
+	case .Ecoli:
+	case .Pseudomonas:
+	}
+}
+
 bacteria_update :: proc(bacteria: ^Bacteria, delta_time: f32, player_x: f32) {
 	for i in 0 ..< MAX_ENEMIES {
-		if !bacteria.hot[i].active do continue
+		hot := &bacteria.hot[i]
+		cold := &bacteria.cold[i]
 
-		hot := &bacteria.hot
-		cold := &bacteria.cold
+		if !hot.active do continue
 
-		def := get_bacteria_def(bacteria.hot[i].species)
-		bacteria_animate(&hot[i], def, delta_time)
+		def := get_bacteria_def(hot.species)
+		bacteria_animate(hot, def, delta_time)
 
-		switch bacteria.cold[i].bacteria_state {
+		switch cold.bacteria_state {
 		case .Entering:
-			bacteria_enter_update(&hot[i], &cold[i], delta_time)
+			bacteria_enter_update(hot, cold, delta_time)
 		case .Holding:
-			bacteria_hold_update(&hot[i], &cold[i], delta_time)
+			bacteria_hold_update(hot, cold, delta_time)
 		case .Diving:
-			if !bacteria.cold[i].dive_initialized {
-				bacteria_dive_init(&hot[i], &cold[i], player_x)
-				bacteria.cold[i].dive_initialized = true
+			if !cold.dive_initialized {
+				bacteria_dive_init(hot, cold, player_x)
+				cold.dive_initialized = true
 			}
-			bacteria_dive_update(&hot[i], &cold[i], delta_time, player_x)
+			bacteria_dive_update(hot, cold, delta_time, player_x)
 		case .Returning:
+			if !cold.return_initialized {
+				bacteria_return_init(hot, cold, delta_time)
+				cold.return_initialized = true
+			}
+			bacteria_return_update(hot, cold, delta_time)
 		case .Fleeing:
 		}
 	}
