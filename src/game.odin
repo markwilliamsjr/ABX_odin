@@ -223,6 +223,25 @@ estimate_bezier_arc_length :: proc(path: EntryPathData, samples: int = 20) -> f3
 	return f32(length)
 }
 
+check_collision :: proc(
+	obj_1_points: sdl.FPoint,
+	obj_1_width: int,
+	obj_1_height: int,
+	obj_2_points: sdl.FPoint,
+	obj_2_width: int,
+	obj_2_height: int,
+) -> bool {
+	if obj_1_points.x + f32(obj_1_width) <= obj_2_points.x ||
+	   obj_2_points.x + f32(obj_2_width) <= obj_1_points.x {
+		return false
+	}
+	if obj_1_points.y + f32(obj_1_height) <= obj_2_points.y ||
+	   obj_2_points.y + f32(obj_2_height) <= obj_1_points.y {
+		return false
+	}
+	return true
+}
+
 // ---- Render ----
 
 render_world :: proc(world: ^World, assets: ^Assets, renderer: ^sdl.Renderer) {
