@@ -106,6 +106,15 @@ player_update :: proc(p: ^Player, keystate: [^]u8, delta_time: f32) {
 	}
 }
 
+bullet_update :: proc(bullets: ^Bullets, delta_time: f32) {
+	for i := bullets.count - 1; i >= 0; i -= 1 {
+		wep_def := get_weapon_def(bullets.weapon_type[i])
+		bullets.y[i] -= bullets.speed[i] * delta_time
+		if bullets.y[i] + f32(wep_def.height) <= 0 {
+			bullet_remove(bullets, i)
+		}
+	}
+}
 // ---- Helpers ----
 
 get_weapon_def :: proc(weapon_type: WeaponType) -> ^WeaponDefinition {
@@ -125,15 +134,6 @@ bullet_spawn :: proc(bullet: ^Bullets, player: ^Player) {
 	bullet.count += 1
 }
 
-bullet_update :: proc(bullets: ^Bullets, delta_time: f32) {
-	for i := bullets.count - 1; i >= 0; i -= 1 {
-		wep_def := get_weapon_def(bullets.weapon_type[i])
-		bullets.y[i] -= bullets.speed[i] * delta_time
-		if bullets.y[i] + f32(wep_def.height) <= 0 {
-			bullet_remove(bullets, i)
-		}
-	}
-}
 
 bullet_remove :: proc(bullet: ^Bullets, index: int) {
 	last := bullet.count - 1
@@ -142,4 +142,14 @@ bullet_remove :: proc(bullet: ^Bullets, index: int) {
 	bullet.speed[index] = bullet.speed[last]
 	bullet.weapon_type[index] = bullet.weapon_type[last]
 	bullet.count -= 1
+}
+
+player_fire_bullet :: proc(player: ^Player, bullet: ^Bullets, keystate: [^]u8) {
+	if keystate[sdl.SCANCODE_SPACE] != 0 && !player.was_firing {
+		player.was_firing = true
+		bullet_spawn(bullet, player)
+	}
+	if keystate[sdl.SCANCODE_SPACE] == 0 {
+		player.was_firing = false
+	}
 }

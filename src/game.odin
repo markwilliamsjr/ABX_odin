@@ -156,16 +156,6 @@ texture_load :: proc(renderer: ^sdl.Renderer, path: string) -> ^sdl.Texture {
 	return texture
 }
 
-player_fire_bullet :: proc(player: ^Player, bullet: ^Bullets, keystate: [^]u8) {
-	if keystate[sdl.SCANCODE_SPACE] != 0 && !player.was_firing {
-		player.was_firing = true
-		bullet_spawn(bullet, player)
-	}
-	if keystate[sdl.SCANCODE_SPACE] == 0 {
-		player.was_firing = false
-	}
-}
-
 // ---- Math ----
 
 bezier_calc :: proc(path_data: EntryPathData, t: f32) -> sdl.FPoint {
