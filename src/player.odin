@@ -26,9 +26,11 @@ WeaponDefinition :: struct {
 }
 
 Bullets :: struct {
-	x, y, speed: [MAX_BULLETS]f32,
-	weapon_type: [MAX_BULLETS]WeaponType,
-	count:       int,
+	x, y, speed:   [MAX_BULLETS]f32,
+	weapon_type:   [MAX_BULLETS]WeaponType,
+	width, height: [MAX_BULLETS]int,
+	count:         int,
+	is_active:     bool,
 }
 
 // ---- Definitions / Tables ----
@@ -89,6 +91,19 @@ player_init :: proc(screen_width: int, screen_height: int) -> Player {
 	return p
 }
 
+bullet_init :: proc(bullet: ^Bullets, player: ^Player) {
+	if bullet.count == MAX_BULLETS {
+		return
+	}
+	wep_def := get_weapon_def(player.current_ammo)
+
+	bullet.x[bullet.count] = player.x + (f32(player.width) / 2) - (f32(wep_def.width) / 2)
+	bullet.y[bullet.count] = player.y
+	bullet.speed[bullet.count] = wep_def.speed
+	bullet.weapon_type[bullet.count] = player.current_ammo
+	bullet.is_active = true
+	bullet.count += 1
+}
 // ---- Update ----
 
 player_update :: proc(p: ^Player, keystate: [^]u8, delta_time: f32) {
@@ -107,7 +122,7 @@ player_update :: proc(p: ^Player, keystate: [^]u8, delta_time: f32) {
 }
 
 bullet_update :: proc(bullets: ^Bullets, delta_time: f32) {
-	for i := bullets.count - 1; i >= 0; i -= 1 {
+	for i := bullets.count; i > 0; i -= 1 {
 		wep_def := get_weapon_def(bullets.weapon_type[i])
 		bullets.y[i] -= bullets.speed[i] * delta_time
 		if bullets.y[i] + f32(wep_def.height) <= 0 {
@@ -121,20 +136,6 @@ get_weapon_def :: proc(weapon_type: WeaponType) -> ^WeaponDefinition {
 	return &WEAPON_DEFS[weapon_type]
 }
 
-bullet_spawn :: proc(bullet: ^Bullets, player: ^Player) {
-	if bullet.count == MAX_BULLETS {
-		return
-	}
-	wep_def := get_weapon_def(player.current_ammo)
-
-	bullet.x[bullet.count] = player.x + (f32(player.width) / 2) - (f32(wep_def.width) / 2)
-	bullet.y[bullet.count] = player.y
-	bullet.speed[bullet.count] = wep_def.speed
-	bullet.weapon_type[bullet.count] = player.current_ammo
-	bullet.count += 1
-}
-
-
 bullet_remove :: proc(bullet: ^Bullets, index: int) {
 	last := bullet.count - 1
 	bullet.x[index] = bullet.x[last]
@@ -147,7 +148,7 @@ bullet_remove :: proc(bullet: ^Bullets, index: int) {
 player_fire_bullet :: proc(player: ^Player, bullet: ^Bullets, keystate: [^]u8) {
 	if keystate[sdl.SCANCODE_SPACE] != 0 && !player.was_firing {
 		player.was_firing = true
-		bullet_spawn(bullet, player)
+		bullet_init(bullet, player)
 	}
 	if keystate[sdl.SCANCODE_SPACE] == 0 {
 		player.was_firing = false

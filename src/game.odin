@@ -13,8 +13,8 @@ SDL_FLAGS :: sdl.INIT_EVERYTHING
 WINDOW_TITLE :: "ABX!"
 WINDOW_FLAGS :: sdl.WINDOW_SHOWN
 RENDERER_FLAGS :: sdl.RENDERER_ACCELERATED | sdl.RENDERER_PRESENTVSYNC
-SCREEN_WIDTH :: 640
-SCREEN_HEIGHT :: 360
+SCREEN_WIDTH :: 1280
+SCREEN_HEIGHT :: 720
 WEAPON_COUNT :: 50
 MAX_BULLETS :: 50
 MAX_ENEMIES :: 50
@@ -128,6 +128,34 @@ world_handle_events :: proc(world: ^World, event: ^sdl.Event, running: ^bool) {
 		}
 		if event.type == .KEYDOWN && event.key.keysym.sym == .ESCAPE {
 			running^ = false
+		}
+	}
+}
+
+collision_update :: proc(bullet: ^Bullets, bacteria: ^Bacteria) {
+	for i := bullet.count; i > 0; i -= 1 {
+		if !bullet.is_active do return
+		for j in 0 ..< MAX_ENEMIES {
+			hot := &bacteria.hot[j]
+			cold := &bacteria.cold[j]
+			bacteria_def := get_bacteria_def(hot.species)
+			weapon_def := get_weapon_def(bullet.weapon_type[i])
+			if !hot.active do continue
+			collision := check_collision(
+				{hot.x, hot.y},
+				hot.hb_width,
+				hot.hb_height,
+				{bullet.x[i], bullet.y[i]},
+				bullet.width[i],
+				bullet.height[i],
+			)
+			if collision {
+				hot.health -= weapon_def.damage_neutral
+				if hot.health <= 0 {
+					hot.active = false
+				}
+				bullet_remove(bullet, i)
+			}
 		}
 	}
 }
