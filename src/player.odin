@@ -122,7 +122,7 @@ player_update :: proc(p: ^Player, keystate: [^]u8, delta_time: f32) {
 }
 
 bullet_update :: proc(bullets: ^Bullets, delta_time: f32) {
-	for i := bullets.count; i > 0; i -= 1 {
+	for i := bullets.count - 1; i >= 0; i -= 1 {
 		wep_def := get_weapon_def(bullets.weapon_type[i])
 		bullets.y[i] -= bullets.speed[i] * delta_time
 		if bullets.y[i] + f32(wep_def.height) <= 0 {
