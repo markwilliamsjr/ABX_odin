@@ -133,8 +133,7 @@ world_handle_events :: proc(world: ^World, event: ^sdl.Event, running: ^bool) {
 }
 
 collision_update :: proc(bullet: ^Bullets, bacteria: ^Bacteria) {
-	for i := bullet.count; i > 0; i -= 1 {
-		if !bullet.is_active do return
+	for i := bullet.count - 1; i >= 0; i -= 1 {
 		for j in 0 ..< MAX_ENEMIES {
 			hot := &bacteria.hot[j]
 			cold := &bacteria.cold[j]
@@ -155,6 +154,7 @@ collision_update :: proc(bullet: ^Bullets, bacteria: ^Bacteria) {
 					hot.active = false
 				}
 				bullet_remove(bullet, i)
+				break
 			}
 		}
 	}
@@ -403,6 +403,7 @@ main :: proc() {
 		player_fire_bullet(&game.world.player, &game.world.bullets, keystate)
 		bullet_update(&game.world.bullets, delta_time)
 		bacteria_update(&game.world.bacteria, delta_time, game.world.player.x)
+		collision_update(&game.world.bullets, &game.world.bacteria)
 		wave_update(&game.world.level.wave[0], &game.world.bacteria, delta_time)
 		wave_dive_update(&game.world.level.wave[0], &game.world.bacteria, delta_time)
 		render_world(&game.world, &game.assets, game.renderer)

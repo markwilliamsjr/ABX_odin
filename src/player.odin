@@ -30,7 +30,6 @@ Bullets :: struct {
 	weapon_type:   [MAX_BULLETS]WeaponType,
 	width, height: [MAX_BULLETS]int,
 	count:         int,
-	is_active:     bool,
 }
 
 // ---- Definitions / Tables ----
@@ -101,7 +100,8 @@ bullet_init :: proc(bullet: ^Bullets, player: ^Player) {
 	bullet.y[bullet.count] = player.y
 	bullet.speed[bullet.count] = wep_def.speed
 	bullet.weapon_type[bullet.count] = player.current_ammo
-	bullet.is_active = true
+	bullet.width[bullet.count] = wep_def.width
+	bullet.height[bullet.count] = wep_def.height
 	bullet.count += 1
 }
 // ---- Update ----
@@ -140,6 +140,8 @@ bullet_remove :: proc(bullet: ^Bullets, index: int) {
 	last := bullet.count - 1
 	bullet.x[index] = bullet.x[last]
 	bullet.y[index] = bullet.y[last]
+	bullet.width[index] = bullet.width[last]
+	bullet.height[index] = bullet.height[last]
 	bullet.speed[index] = bullet.speed[last]
 	bullet.weapon_type[index] = bullet.weapon_type[last]
 	bullet.count -= 1
