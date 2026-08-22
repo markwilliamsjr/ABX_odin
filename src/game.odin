@@ -13,8 +13,8 @@ SDL_FLAGS :: sdl.INIT_EVERYTHING
 WINDOW_TITLE :: "ABX!"
 WINDOW_FLAGS :: sdl.WINDOW_SHOWN
 RENDERER_FLAGS :: sdl.RENDERER_ACCELERATED | sdl.RENDERER_PRESENTVSYNC
-SCREEN_WIDTH :: 1280 // 640
-SCREEN_HEIGHT :: 720 // 360
+SCREEN_WIDTH :: 1280
+SCREEN_HEIGHT :: 720
 WEAPON_COUNT :: 50
 MAX_BULLETS :: 50
 MAX_ENEMIES :: 50
@@ -149,7 +149,7 @@ collision_update :: proc(bullet: ^Bullets, bacteria: ^Bacteria) {
 				bullet.height[i],
 			)
 			if collision {
-				hot.health -= weapon_def.damage_neutral
+				hot.health -= calculate_bullet_damage(weapon_def^, bacteria_def^)
 				if hot.health <= 0 {
 					hot.active = false
 				}
@@ -258,6 +258,19 @@ check_collision :: proc(
 		return false
 	}
 	return true
+}
+
+calculate_bullet_damage :: proc(
+	weapon_def: WeaponDefinition,
+	bacteria_def: BacteriaDefinition,
+) -> int {
+	if weapon_def.weapon_type == .Neutral {
+		return weapon_def.damage_neutral
+	}
+	if weapon_def.weapon_type == bacteria_def.weakness {
+		return weapon_def.damage_effective
+	}
+	return weapon_def.damage_ineffective
 }
 
 // ---- Render ----
