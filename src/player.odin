@@ -74,10 +74,10 @@ WEAPON_DEFS := [WeaponType]WeaponDefinition {
 
 player_init :: proc(screen_width: int, screen_height: int) -> Player {
 	p := Player {
-		width        = 64,
-		height       = 128,
-		hb_width     = 22,
-		hb_height    = 65,
+		width        = 32,
+		height       = 45,
+		hb_width     = 32,
+		hb_height    = 45,
 		speed        = 300,
 		active       = true,
 		current_ammo = .Neutral,
