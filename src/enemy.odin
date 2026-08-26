@@ -244,7 +244,7 @@ bacteria_dive_init :: proc(hot: ^BacteriaHot, cold: ^BacteriaCold, player_x: f32
 			amplitude  = 10.0,
 			frequency  = 1.0,
 			start_x    = hot.x,
-			dive_speed = 200.0,
+			dive_speed = cold.speed,
 		}
 	case .Staph:
 		cold.dive_type = Scatter_Dive {
