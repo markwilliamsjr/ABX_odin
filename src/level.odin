@@ -1,5 +1,6 @@
 package main
 
+import "core:fmt"
 import "core:math/rand"
 import sdl "vendor:sdl2"
 
@@ -55,9 +56,9 @@ Level :: struct {
 
 // ---- Init ----
 
-wave_init :: proc(wp: ^WaveParams, wave: ^Wave) {
+wave_init :: proc(wp: ^WaveParams, wave: ^Wave, wave_seed: u64) {
+	fmt.println("Wave Seed: ", wave_seed)
 	region, count := compute_formation_bounds(wp)
-
 	pool: [ENTRY_POINT_COUNT]int
 	for i in 0 ..< ENTRY_POINT_COUNT do pool[i] = i
 	entry_count := ENTRY_POINT_COUNT
@@ -90,9 +91,10 @@ wave_init :: proc(wp: ^WaveParams, wave: ^Wave) {
 	wave.formation_complete = false
 }
 
-level_init :: proc(bacteria: ^Bacteria, level: ^Level) {
+level_init :: proc(bacteria: ^Bacteria, level: ^Level, seed: u64) {
+	wave_seed := derive_seed(seed, .Wave, 0)
 	level_params := level_to_params(1)
-	wave_init(&level_params, &level.wave[0])
+	wave_init(&level_params, &level.wave[0], wave_seed)
 }
 
 // ---- Update ----

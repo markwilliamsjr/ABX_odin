@@ -1,6 +1,8 @@
 package main
 
+import "core:hash"
 import "core:math"
+import "core:mem"
 import sdl "vendor:sdl2"
 
 // ---- Constants ----
@@ -19,6 +21,13 @@ DiverSelectionRule :: enum {
 	First_Found,
 	Edges,
 	Random,
+}
+
+SeedCategory :: enum {
+	Wave,
+	Formation,
+	Entry,
+	Enemy,
 }
 
 FormationBounds :: struct {
@@ -337,4 +346,10 @@ select_diver :: proc(wave: ^Wave, bacteria: ^Bacteria) -> int {
 		return select_random_diver(wave, bacteria)
 	}
 	return -1
+}
+
+derive_seed :: proc(parent_seed: u64, category: SeedCategory, number: int) -> u64 {
+	packing := (u64(category) << 32) ~ u64(number)
+	u8array := mem.any_to_bytes(packing)
+	return hash.murmur64a(u8array, parent_seed)
 }

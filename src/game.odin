@@ -4,6 +4,7 @@ import "core:fmt"
 import "core:math"
 import "core:os"
 import "core:strings"
+import "core:time"
 import sdl "vendor:sdl2"
 import sdl_image "vendor:sdl2/image"
 
@@ -24,10 +25,11 @@ MAX_REGIONS :: 4
 // ---- Types ----
 
 Game :: struct {
-	window:   ^sdl.Window,
-	renderer: ^sdl.Renderer,
-	assets:   Assets,
-	world:    World,
+	window:      ^sdl.Window,
+	renderer:    ^sdl.Renderer,
+	assets:      Assets,
+	world:       World,
+	master_seed: u64,
 }
 
 World :: struct {
@@ -56,7 +58,7 @@ GameState :: enum {
 
 initialize_sdl :: proc(g: ^Game) -> bool {
 	if sdl.Init(SDL_FLAGS) != 0 {
-		fmt.eprintfln("Error initializing SDL2: %s", sdl.GetError())
+		// fmt.eprintfln("Error initializing SDL2: %s", sdl.GetError())
 		return false
 	}
 	g.window = sdl.CreateWindow(
@@ -68,31 +70,34 @@ initialize_sdl :: proc(g: ^Game) -> bool {
 		WINDOW_FLAGS,
 	)
 	if g.window == nil {
-		fmt.eprintfln("Error creating window: %s", sdl.GetError())
+		// fmt.eprintfln("Error creating window: %s", sdl.GetError())
 		return false
 	}
 	g.renderer = sdl.CreateRenderer(g.window, -1, RENDERER_FLAGS)
 	if g.renderer == nil {
-		fmt.eprintfln("Error creating renderer: %s", sdl.GetError())
+		// fmt.eprintfln("Error creating renderer: %s", sdl.GetError())
 		return false
 	}
 	img_flags := sdl_image.INIT_PNG
 	if (sdl_image.Init(img_flags) & img_flags) != img_flags {
-		fmt.eprintfln("SDL image initialization failted %s\n", sdl_image.GetError())
+		// fmt.eprintfln("SDL image initialization failted %s\n", sdl_image.GetError())
 		return false
 	}
 	return true
 }
 
 game_init :: proc(game: ^Game) {
+	now := time.now()
+	game.master_seed = u64(time.time_to_unix_nano(now))
+	fmt.println("Master Seed: ", game.master_seed)
 	assets_init(&game.assets, game.renderer)
-	world_init(&game.world)
+	world_init(&game.world, game.master_seed)
 }
 
-world_init :: proc(world: ^World) {
+world_init :: proc(world: ^World, seed: u64) {
 	world.state = .Menu
 	world.player = player_init(SCREEN_WIDTH, SCREEN_HEIGHT)
-	level_init(&world.bacteria, &world.level)
+	level_init(&world.bacteria, &world.level, seed)
 }
 
 assets_init :: proc(asset: ^Assets, renderer: ^sdl.Renderer) {
@@ -100,18 +105,18 @@ assets_init :: proc(asset: ^Assets, renderer: ^sdl.Renderer) {
 		def := get_weapon_def(kind)
 		asset.ships[kind] = texture_load(renderer, def.ship_texture_path)
 		if asset.ships[kind] != nil {
-			fmt.println(kind, "Ship Loaded")
+			// fmt.println(kind, "Ship Loaded")
 		}
 		asset.bullets[kind] = texture_load(renderer, def.bullet_texture_path)
 		if asset.bullets[kind] != nil {
-			fmt.println(kind, "Bullet Loaded")
+			// fmt.println(kind, "Bullet Loaded")
 		}
 	}
 	for bacteria in BacteriaSpecies {
 		def := get_bacteria_def(bacteria)
 		asset.bacteria[bacteria] = texture_load(renderer, def.texture_path)
 		if asset.bacteria[bacteria] != nil {
-			fmt.println(bacteria, "Texture Loaded")
+			// fmt.println(bacteria, "Texture Loaded")
 		}
 	}
 }
@@ -164,13 +169,13 @@ collision_update :: proc(bullet: ^Bullets, bacteria: ^Bacteria) {
 
 texture_load :: proc(renderer: ^sdl.Renderer, path: string) -> ^sdl.Texture {
 	if path == "" {
-		fmt.eprintfln("Texture load called NULL path\n")
+		// fmt.eprintfln("Texture load called NULL path\n")
 		return nil
 	}
 
 	surface := sdl_image.Load(strings.clone_to_cstring(path, context.temp_allocator))
 	if surface == nil {
-		fmt.eprintfln("Unable to load image: %s", sdl_image.GetError())
+		// fmt.eprintfln("Unable to load image: %s", sdl_image.GetError())
 		return nil
 	}
 
@@ -178,7 +183,7 @@ texture_load :: proc(renderer: ^sdl.Renderer, path: string) -> ^sdl.Texture {
 
 	texture := sdl.CreateTextureFromSurface(renderer, surface)
 	if texture == nil {
-		fmt.eprintfln("Unable to create texture from surface: SDL Error: %s", sdl_image.GetError())
+		// fmt.eprintfln("Unable to create texture from surface: SDL Error: %s", sdl_image.GetError())
 		return nil
 	}
 	return texture
@@ -400,7 +405,7 @@ main :: proc() {
 
 		fps_timer += delta_time
 		if fps_timer >= 1.0 {
-			fmt.printfln("FPS: %.1f", 1.0 / delta_time)
+			// fmt.printfln("FPS: %.1f", 1.0 / delta_time)
 			fps_timer = 0.0
 		}
 
