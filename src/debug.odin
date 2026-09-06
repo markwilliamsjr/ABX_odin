@@ -19,7 +19,6 @@ Debug :: struct {
 
 // ---- INIT ----
 debug_init :: proc(debug: ^Debug) {
-    debug.debug_enabled = true      
 }
 
 // ---- UPDATE ----

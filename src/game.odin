@@ -126,17 +126,23 @@ assets_init :: proc(asset: ^Assets, renderer: ^sdl.Renderer) {
 
 // ---- Update ----
 
-world_handle_events :: proc(world: ^World, event: ^sdl.Event, running: ^bool) {
+game_handle_events :: proc(game: ^Game, event: ^sdl.Event, running: ^bool) {
 	for (sdl.PollEvent(event)) {
-		if event.type == .QUIT {
-			running^ = false
-		}
-		if event.type == .WINDOWEVENT && event.window.event == .CLOSE {
-			running^ = false
-		}
-		if event.type == .KEYDOWN && event.key.keysym.sym == .ESCAPE {
-			running^ = false
-		}
+        #partial switch event.type {
+        case .QUIT:
+            running^ = false
+
+        case .WINDOWEVENT:
+            if event.window.event == .CLOSE do running^ = false
+
+        case .KEYDOWN:
+            #partial switch event.key.keysym.sym {
+            case .ESCAPE:
+                running^ = false
+            case .F3:
+                game.debug.debug_enabled = !game.debug.debug_enabled
+            }
+        }
 	}
 }
 
@@ -405,7 +411,7 @@ main :: proc() {
 		delta_time := f32(current_time - last_time) / 1000.0
 		last_time = current_time
 
-		world_handle_events(&game.world, &event, &running)
+		game_handle_events(&game, &event, &running)
 		keystate := sdl.GetKeyboardState(nil)
 
 		// DEBUG UPDATES
