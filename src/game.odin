@@ -29,6 +29,8 @@ Game :: struct {
 	renderer:    ^sdl.Renderer,
 	assets:      Assets,
 	world:       World,
+	debug:       Debug,
+	config:      Config,
 	master_seed: u64,
 }
 
@@ -92,6 +94,7 @@ game_init :: proc(game: ^Game) {
 	fmt.println("Master Seed: ", game.master_seed)
 	assets_init(&game.assets, game.renderer)
 	world_init(&game.world, game.master_seed)
+	debug_init(&game.debug)
 }
 
 world_init :: proc(world: ^World, seed: u64) {
@@ -394,7 +397,6 @@ main :: proc() {
 	event: sdl.Event
 	last_time := sdl.GetTicks()
 	running := true
-	fps_timer: f32 = 0.0
 
 	// GAME LOOP
 
@@ -403,20 +405,13 @@ main :: proc() {
 		delta_time := f32(current_time - last_time) / 1000.0
 		last_time = current_time
 
-		fps_timer += delta_time
-		if fps_timer >= 1.0 {
-			// fmt.printfln("FPS: %.1f", 1.0 / delta_time)
-			fps_timer = 0.0
-		}
-
 		world_handle_events(&game.world, &event, &running)
 		keystate := sdl.GetKeyboardState(nil)
 
-		/* 
-     * Player Update will eventually be merged into a game update
-     * that will handle players, enemies, and level updates
-     */
+		// DEBUG UPDATES
+		debug_update(&game.debug, delta_time)
 
+		// GAME UPDATES
 		player_update(&game.world.player, keystate, delta_time)
 		player_fire_bullet(&game.world.player, &game.world.bullets, keystate)
 		bullet_update(&game.world.bullets, delta_time)
@@ -424,7 +419,10 @@ main :: proc() {
 		collision_update(&game.world.bullets, &game.world.bacteria)
 		wave_update(&game.world.level.wave[0], &game.world.bacteria, delta_time)
 		wave_dive_update(&game.world.level.wave[0], &game.world.bacteria, delta_time)
+
+        // RENDER
 		render_world(&game.world, &game.assets, game.renderer)
+        debug_render(&game.debug, game.renderer)
 		sdl.RenderPresent(game.renderer)
 	}
 }

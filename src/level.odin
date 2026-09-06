@@ -33,7 +33,6 @@ ENTRY_POINTS := [ENTRY_POINT_COUNT]sdl.FPoint {
 
 // ---- Types ----
 
-
 Wave :: struct {
 	level, total_enemies, spawn_count, species_unlocked, max_simult_divers:    int,
 	threshold, spawn_delay, spawn_timer, dive_delay, dive_timer, speed_scalar: f32,
