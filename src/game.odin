@@ -14,8 +14,12 @@ SDL_FLAGS :: sdl.INIT_EVERYTHING
 WINDOW_TITLE :: "ABX!"
 WINDOW_FLAGS :: sdl.WINDOW_SHOWN
 RENDERER_FLAGS :: sdl.RENDERER_ACCELERATED | sdl.RENDERER_PRESENTVSYNC
+
 SCREEN_WIDTH :: 640
 SCREEN_HEIGHT :: 360
+WINDOW_WIDTH :: 1280
+WINDOW_HEIGHT :: 720
+
 WEAPON_COUNT :: 50
 MAX_BULLETS :: 50
 MAX_ENEMIES :: 50
@@ -67,8 +71,8 @@ initialize_sdl :: proc(g: ^Game) -> bool {
 		WINDOW_TITLE,
 		sdl.WINDOWPOS_CENTERED,
 		sdl.WINDOWPOS_CENTERED,
-		SCREEN_WIDTH,
-		SCREEN_HEIGHT,
+		WINDOW_WIDTH,
+		WINDOW_HEIGHT,
 		WINDOW_FLAGS,
 	)
 	if g.window == nil {
@@ -76,6 +80,7 @@ initialize_sdl :: proc(g: ^Game) -> bool {
 		return false
 	}
 	g.renderer = sdl.CreateRenderer(g.window, -1, RENDERER_FLAGS)
+	sdl.RenderSetLogicalSize(g.renderer, SCREEN_WIDTH, SCREEN_HEIGHT)
 	if g.renderer == nil {
 		// fmt.eprintfln("Error creating renderer: %s", sdl.GetError())
 		return false
@@ -128,21 +133,21 @@ assets_init :: proc(asset: ^Assets, renderer: ^sdl.Renderer) {
 
 game_handle_events :: proc(game: ^Game, event: ^sdl.Event, running: ^bool) {
 	for (sdl.PollEvent(event)) {
-        #partial switch event.type {
-        case .QUIT:
-            running^ = false
+		#partial switch event.type {
+		case .QUIT:
+			running^ = false
 
-        case .WINDOWEVENT:
-            if event.window.event == .CLOSE do running^ = false
+		case .WINDOWEVENT:
+			if event.window.event == .CLOSE do running^ = false
 
-        case .KEYDOWN:
-            #partial switch event.key.keysym.sym {
-            case .ESCAPE:
-                running^ = false
-            case .F3:
-                game.debug.debug_enabled = !game.debug.debug_enabled
-            }
-        }
+		case .KEYDOWN:
+			#partial switch event.key.keysym.sym {
+			case .ESCAPE:
+				running^ = false
+			case .F3:
+				game.debug.debug_enabled = !game.debug.debug_enabled
+			}
+		}
 	}
 }
 
@@ -426,9 +431,9 @@ main :: proc() {
 		wave_update(&game.world.level.wave[0], &game.world.bacteria, delta_time)
 		wave_dive_update(&game.world.level.wave[0], &game.world.bacteria, delta_time)
 
-        // RENDER
+		// RENDER
 		render_world(&game.world, &game.assets, game.renderer)
-        debug_render(&game.debug, game.renderer)
+		debug_render(&game.debug, game.renderer)
 		sdl.RenderPresent(game.renderer)
 	}
 }
