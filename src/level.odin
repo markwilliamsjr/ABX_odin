@@ -1,5 +1,6 @@
 package main
 
+import "base:runtime"
 import "core:container/pool"
 import "core:fmt"
 import "core:math/rand"
@@ -61,7 +62,7 @@ wave_init :: proc(wp: ^WaveParams, wave: ^Wave, wave_seed: u64) {
 	fmt.println("Wave Seed: ", wave_seed)
 
 	entry_rng_state := rand.create(derive_seed(wave_seed, .Entry, 0))
-	entry_rng := &entry_rng_state
+	entry_rng := runtime.default_random_generator(&entry_rng_state)
 
 	region_size, region_count := compute_formation_bounds(wp)
 
@@ -175,13 +176,13 @@ wave_dive_update :: proc(wave: ^Wave, bacteria: ^Bacteria, delta_time: f32) {
 // ---- Helper ----
 
 generate_entry_points :: proc(
-	rng: ^rand.Default_Random_State,
+	rng: runtime.Random_Generator,
 	rules: EntryRules,
 ) -> (
 	result: EntryResult,
 	ok: bool,
 ) {
-	if rules.count < len(rules.available_points) {
+	if rules.count > len(rules.available_points) {
 		return {}, false
 	}
 	pool := make([]int, len(rules.available_points), context.temp_allocator)
@@ -189,7 +190,7 @@ generate_entry_points :: proc(
 	remaining := len(pool)
 
 	for i in 0 ..< rules.count {
-		r := rand.int_max(remaining)
+		r := rand.int_max(remaining, rng)
 		chosen := pool[r]
 		pool[r] = pool[remaining - 1]
 		remaining -= 1
