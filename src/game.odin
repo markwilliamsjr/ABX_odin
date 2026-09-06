@@ -7,6 +7,7 @@ import "core:strings"
 import "core:time"
 import sdl "vendor:sdl2"
 import sdl_image "vendor:sdl2/image"
+import ttf "vendor:sdl2/ttf"
 
 // ---- Consants ----
 
@@ -47,9 +48,10 @@ World :: struct {
 }
 
 Assets :: struct {
-	ships:    [WeaponType]^sdl.Texture,
-	bullets:  [WeaponType]^sdl.Texture,
-	bacteria: [BacteriaSpecies]^sdl.Texture,
+	ships:      [WeaponType]^sdl.Texture,
+	bullets:    [WeaponType]^sdl.Texture,
+	bacteria:   [BacteriaSpecies]^sdl.Texture,
+	debug_font: ^ttf.Font,
 }
 
 GameState :: enum {
@@ -67,6 +69,9 @@ initialize_sdl :: proc(g: ^Game) -> bool {
 		// fmt.eprintfln("Error initializing SDL2: %s", sdl.GetError())
 		return false
 	}
+	if ttf.Init() != 0 {
+		return false
+	}
 	g.window = sdl.CreateWindow(
 		WINDOW_TITLE,
 		sdl.WINDOWPOS_CENTERED,
@@ -79,6 +84,7 @@ initialize_sdl :: proc(g: ^Game) -> bool {
 		// fmt.eprintfln("Error creating window: %s", sdl.GetError())
 		return false
 	}
+	sdl.SetHint(sdl.HINT_RENDER_SCALE_QUALITY, "0")
 	g.renderer = sdl.CreateRenderer(g.window, -1, RENDERER_FLAGS)
 	sdl.RenderSetLogicalSize(g.renderer, SCREEN_WIDTH, SCREEN_HEIGHT)
 	if g.renderer == nil {
@@ -111,22 +117,28 @@ world_init :: proc(world: ^World, seed: u64) {
 assets_init :: proc(asset: ^Assets, renderer: ^sdl.Renderer) {
 	for kind in WeaponType {
 		def := get_weapon_def(kind)
-		asset.ships[kind] = texture_load(renderer, def.ship_texture_path)
+		asset.ships[kind] = image_texture_load(renderer, def.ship_texture_path)
 		if asset.ships[kind] != nil {
 			// fmt.println(kind, "Ship Loaded")
 		}
-		asset.bullets[kind] = texture_load(renderer, def.bullet_texture_path)
+		asset.bullets[kind] = image_texture_load(renderer, def.bullet_texture_path)
 		if asset.bullets[kind] != nil {
 			// fmt.println(kind, "Bullet Loaded")
 		}
 	}
 	for bacteria in BacteriaSpecies {
 		def := get_bacteria_def(bacteria)
-		asset.bacteria[bacteria] = texture_load(renderer, def.texture_path)
+		asset.bacteria[bacteria] = image_texture_load(renderer, def.texture_path)
 		if asset.bacteria[bacteria] != nil {
 			// fmt.println(bacteria, "Texture Loaded")
 		}
 	}
+	debug_font_path := "assets/fonts/mono.ttf"
+	asset.debug_font = ttf.OpenFont(
+		strings.clone_to_cstring(debug_font_path, context.temp_allocator),
+		16,
+	)
+	if asset.debug_font == nil do fmt.println("Debug Font not found")
 }
 
 // ---- Update ----
@@ -181,7 +193,7 @@ collision_update :: proc(bullet: ^Bullets, bacteria: ^Bacteria) {
 
 // ---- Helper ----
 
-texture_load :: proc(renderer: ^sdl.Renderer, path: string) -> ^sdl.Texture {
+image_texture_load :: proc(renderer: ^sdl.Renderer, path: string) -> ^sdl.Texture {
 	if path == "" {
 		// fmt.eprintfln("Texture load called NULL path\n")
 		return nil
@@ -373,6 +385,7 @@ assets_destroy :: proc(assets: ^Assets) {
 			assets.bullets[kind] = nil
 		}
 	}
+	if assets.debug_font != nil do ttf.CloseFont(assets.debug_font)
 }
 
 world_cleanup :: proc(world: ^World) {
@@ -385,6 +398,8 @@ game_cleanup :: proc(g: ^Game) {
 		if g.renderer != nil do sdl.DestroyRenderer(g.renderer)
 		if g.window != nil do sdl.DestroyWindow(g.window)
 	}
+	ttf.Quit()
+	sdl_image.Quit()
 	sdl.Quit()
 }
 
@@ -433,7 +448,7 @@ main :: proc() {
 
 		// RENDER
 		render_world(&game.world, &game.assets, game.renderer)
-		debug_render(&game.debug, game.renderer)
+		debug_render(&game.debug, &game.assets, game.renderer)
 		sdl.RenderPresent(game.renderer)
 	}
 }
