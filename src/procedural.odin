@@ -34,6 +34,20 @@ FormationBounds :: struct {
 	x, y, width, height: f32,
 }
 
+FormationResult :: struct {
+	placed, remaining: int,
+}
+
+EntryRules :: struct {
+	available_points: []sdl.FPoint,
+	count:            int,
+}
+
+EntryResult :: struct {
+	start_points: [MAX_REGIONS]sdl.FPoint,
+	count:        int,
+}
+
 EntryPathData :: struct {
 	control_points: [MAX_SEGMENTS * 4]sdl.FPoint,
 	segment_pause:  [MAX_SEGMENTS]f32,
@@ -41,9 +55,6 @@ EntryPathData :: struct {
 	path_type:      PathType,
 }
 
-FormationResult :: struct {
-	placed, remaining: int,
-}
 
 WaveParams :: struct {
 	total_enemies, max_simult_divers, species_unlocked, level: int,
@@ -301,17 +312,17 @@ line_generate :: proc(base: ^BasicGenerationParams, params: LineParams) -> Forma
 compute_formation_bounds :: proc(
 	wp: ^WaveParams,
 ) -> (
-	regions: [MAX_REGIONS]FormationBounds,
-	count: int,
+	region_size: [MAX_REGIONS]FormationBounds,
+	region_count: int,
 ) {
-	regions[0] = FormationBounds {
+	region_size[0] = FormationBounds {
 		x      = f32(SCREEN_WIDTH) * 0.1,
 		y      = f32(SCREEN_HEIGHT) * 0.05,
 		width  = f32(SCREEN_WIDTH) * 0.8,
 		height = f32(SCREEN_HEIGHT) * 0.25,
 	}
-	count = 1
-	return
+	region_count = 1
+	return region_size, region_count
 }
 
 select_first_found :: proc(wave: ^Wave, bacteria: ^Bacteria) -> int {

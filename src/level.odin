@@ -1,5 +1,6 @@
 package main
 
+import "core:container/pool"
 import "core:fmt"
 import "core:math/rand"
 import sdl "vendor:sdl2"
@@ -42,7 +43,7 @@ Wave :: struct {
 	control_points:                                                            [3]sdl.FPoint,
 	formation_positions:                                                       [MAX_REGIONS][MAX_ENEMIES]sdl.FPoint,
 	region_start:                                                              [MAX_REGIONS]sdl.FPoint,
-	region_count:                                                              [MAX_REGIONS]int,
+	region_enemy_count:                                                        [MAX_REGIONS]int,
 	spawn_region, spawn_index:                                                 int,
 	diver_selection_rule:                                                      DiverSelectionRule,
 }
@@ -58,29 +59,35 @@ Level :: struct {
 
 wave_init :: proc(wp: ^WaveParams, wave: ^Wave, wave_seed: u64) {
 	fmt.println("Wave Seed: ", wave_seed)
-	region, count := compute_formation_bounds(wp)
-	pool: [ENTRY_POINT_COUNT]int
-	for i in 0 ..< ENTRY_POINT_COUNT do pool[i] = i
-	entry_count := ENTRY_POINT_COUNT
 
+	entry_rng_state := rand.create(derive_seed(wave_seed, .Entry, 0))
+	entry_rng := &entry_rng_state
 
-	for i in 0 ..< count {
-		base := BasicGenerationParams {
-			bounds      = region[i],
-			min_spacing = 5.0,
-			count       = wp.total_enemies,
-			positions   = &wave.formation_positions[i],
-		}
-		result := generate_formation(&base, wp.formation_params)
+	region_size, region_count := compute_formation_bounds(wp)
 
-		r := rand.int_max(entry_count)
-		chosen := pool[r]
-		pool[r] = pool[entry_count - 1]
-		entry_count -= 1
-
-		wave.region_start[i] = ENTRY_POINTS[chosen]
-		wave.region_count[i] = result.placed
+	entry_rules := EntryRules {
+		available_points = ENTRY_POINTS[:],
+		count            = region_count,
 	}
+
+	entry_point_result, entry_ok := generate_entry_points(entry_rng, entry_rules)
+
+	if !entry_ok {
+		// TODO need fall back
+	}
+	base := BasicGenerationParams {
+		bounds      = region_size[0],
+		min_spacing = 5.0,
+		count       = wp.total_enemies,
+		positions   = &wave.formation_positions[0],
+	}
+	result := generate_formation(&base, wp.formation_params)
+
+	for i in 0 ..< region_count {
+		wave.region_start[i] = entry_point_result.start_points[i]
+		wave.region_enemy_count[i] = result.placed
+	}
+
 	wave.path = wp.path_type
 	wave.speed_scalar = wp.speed_scalar
 	wave.spawn_delay = wp.spawn_delay
@@ -105,7 +112,7 @@ wave_update :: proc(wave: ^Wave, bacteria: ^Bacteria, delta_time: f32) {
 
 		wave.spawn_timer -= wave.spawn_delay
 
-		for wave.spawn_index >= wave.region_count[wave.spawn_region] {
+		for wave.spawn_index >= wave.region_enemy_count[wave.spawn_region] {
 			wave.spawn_region += 1
 			wave.spawn_index = 0
 		}
@@ -163,4 +170,32 @@ wave_dive_update :: proc(wave: ^Wave, bacteria: ^Bacteria, delta_time: f32) {
 			bacteria.cold[idx].bacteria_state = .Diving
 		}
 	}
+}
+
+// ---- Helper ----
+
+generate_entry_points :: proc(
+	rng: ^rand.Default_Random_State,
+	rules: EntryRules,
+) -> (
+	result: EntryResult,
+	ok: bool,
+) {
+	if rules.count < len(rules.available_points) {
+		return {}, false
+	}
+	pool := make([]int, len(rules.available_points), context.temp_allocator)
+	for i in 0 ..< len(pool) do pool[i] = i
+	remaining := len(pool)
+
+	for i in 0 ..< rules.count {
+		r := rand.int_max(remaining)
+		chosen := pool[r]
+		pool[r] = pool[remaining - 1]
+		remaining -= 1
+
+		result.start_points[i] = rules.available_points[chosen]
+	}
+	result.count = rules.count
+	return result, true
 }
