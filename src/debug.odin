@@ -30,7 +30,6 @@ debug_update :: proc(debug: ^Debug, delta_time: f32) {
 
 	if debug.fps_timer >= 1.0 {
 		debug.fps = f32(debug.fps_frames) / debug.fps_timer
-		fmt.println("FPS: ", debug.fps)
 		debug.fps_frames = 0
 		debug.fps_timer = 0.0
 	}
@@ -50,7 +49,7 @@ debug_render :: proc(debug: ^Debug, assets: ^Assets, renderer: ^sdl.Renderer) {
 	}
 	sdl.RenderFillRect(renderer, &rect)
 
-	fps_text := strings.clone_to_cstring(fmt.aprintf("FPS: %.1f", debug.fps))
+	fps_text := strings.clone_to_cstring(fmt.aprintf("FPS: %.1f", debug.fps, allocator = context.temp_allocator))
 
 	fps_surface := ttf.RenderText_Blended(assets.debug_font, fps_text, {255, 255, 255, 220})
 	defer sdl.FreeSurface(fps_surface)
@@ -67,4 +66,5 @@ debug_render :: proc(debug: ^Debug, assets: ^Assets, renderer: ^sdl.Renderer) {
 		w = fps_text_w,
 		h = fps_text_h,
 	}
-	sdl.RenderCopy(renderer, fps_texture, nil, &fps_text_rect)}
+	sdl.RenderCopy(renderer, fps_texture, nil, &fps_text_rect)
+}
