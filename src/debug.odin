@@ -20,6 +20,10 @@ Debug :: struct {
 	fps_texture: ^sdl.Texture,
 	prev_fps: f32, 
 	fps_rect: sdl.Rect,
+
+	game_state_texture: ^sdl.Texture,
+	prev_game_state: GameState,
+	game_state_rect: sdl.Rect,
 }
 
 // ---- INIT ----
@@ -39,9 +43,10 @@ debug_update :: proc(debug: ^Debug, delta_time: f32) {
 }
 
 // ---- RENDER ----
-debug_render :: proc(debug: ^Debug, assets: ^Assets, renderer: ^sdl.Renderer) {
+debug_render :: proc(debug: ^Debug, assets: ^Assets, world: ^World, renderer: ^sdl.Renderer) {
 	if !debug.debug_enabled do return
 
+	// Draw debug background
 	sdl.SetRenderDrawBlendMode(renderer, .BLEND)
 	sdl.SetRenderDrawColor(renderer, 10, 10, 10, 220)
 	rect := sdl.Rect {
@@ -52,6 +57,7 @@ debug_render :: proc(debug: ^Debug, assets: ^Assets, renderer: ^sdl.Renderer) {
 	}
 	sdl.RenderFillRect(renderer, &rect)
 
+	// Draw FPS
 	if debug.prev_fps != debug.fps || debug.fps_texture == nil {
 		fps_text := strings.clone_to_cstring(fmt.aprintf("FPS: %.1f", debug.fps, allocator = context.temp_allocator))
 		fps_surface := ttf.RenderText_Blended(assets.debug_font, fps_text, {255, 255, 255, 220})
@@ -70,5 +76,17 @@ debug_render :: proc(debug: ^Debug, assets: ^Assets, renderer: ^sdl.Renderer) {
 		}
 	debug.prev_fps = debug.fps
 	}
-	sdl.RenderCopy(renderer, debug.fps_texture, nil, &fps_text_rect)
+	sdl.RenderCopy(renderer, debug.fps_texture, nil, &debug.fps_rect)
+
+	if debug.prev_game_state != world.state || debug.game_state_texture == nil {
+			game_state_text := strings.clone_to_cstring(fmt.aprintf("State: %v", world.state, allocator = context.temp_allocator))
+			game_state_surface := ttf.RenderText_Blended(assets.debug_font, game_state_text, {255, 255, 255, 220})
+			defer sdl.FreeSurface(game_state_surface)
+			defer sdl.DestroyTexture(debug.game_state_texture)
+			debug.game_state_texture = sdl.CreateTextureFromSurface(renderer, game_state_surface)
+			game_state_text_w: i32
+			game_state_text_h: i32
+			sdl.QueryTexture(debug.game_state_texture, nil, nil, &game_state_text_w, &game_state_text_h)
+			
+	}
 }

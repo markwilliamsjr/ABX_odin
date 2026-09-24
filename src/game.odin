@@ -448,7 +448,7 @@ main :: proc() {
 
 		// RENDER
 		render_world(&game.world, &game.assets, game.renderer)
-		debug_render(&game.debug, &game.assets, game.renderer)
+		debug_render(&game.debug, &game.assets, &game.world, game.renderer)
 		sdl.RenderPresent(game.renderer)
 	}
 }
