@@ -17,6 +17,9 @@ Debug :: struct {
 	fps_timer:     f32,
 	fps_frames:    int,
 	frame_count:   u64,
+	fps_texture: ^sdl.Texture,
+	prev_fps: f32, 
+	fps_rect: sdl.Rect,
 }
 
 // ---- INIT ----
@@ -49,22 +52,23 @@ debug_render :: proc(debug: ^Debug, assets: ^Assets, renderer: ^sdl.Renderer) {
 	}
 	sdl.RenderFillRect(renderer, &rect)
 
-	fps_text := strings.clone_to_cstring(fmt.aprintf("FPS: %.1f", debug.fps, allocator = context.temp_allocator))
+	if debug.prev_fps != debug.fps || debug.fps_texture == nil {
+		fps_text := strings.clone_to_cstring(fmt.aprintf("FPS: %.1f", debug.fps, allocator = context.temp_allocator))
+		fps_surface := ttf.RenderText_Blended(assets.debug_font, fps_text, {255, 255, 255, 220})
+		defer sdl.FreeSurface(fps_surface)
+		defer sdl.DestroyTexture(debug.fps_texture)
+		debug.fps_texture = sdl.CreateTextureFromSurface(renderer, fps_surface)
+		fps_text_w: i32
+		fps_text_h: i32
+		sdl.QueryTexture(debug.fps_texture, nil, nil, &fps_text_w, &fps_text_h)
 
-	fps_surface := ttf.RenderText_Blended(assets.debug_font, fps_text, {255, 255, 255, 220})
-	defer sdl.FreeSurface(fps_surface)
-
-	fps_texture := sdl.CreateTextureFromSurface(renderer, fps_surface)
-	defer sdl.DestroyTexture(fps_texture)
-	fps_text_w: i32
-	fps_text_h: i32
-	sdl.QueryTexture(fps_texture, nil, nil, &fps_text_w, &fps_text_h)
-
-	fps_text_rect := sdl.Rect {
-		x = 15,
-		y = 15,
-		w = fps_text_w,
-		h = fps_text_h,
+		debug.fps_rect = sdl.Rect {
+			x = 15,
+			y = 15,
+			w = fps_text_w,
+			h = fps_text_h,
+		}
+	debug.prev_fps = debug.fps
 	}
-	sdl.RenderCopy(renderer, fps_texture, nil, &fps_text_rect)
+	sdl.RenderCopy(renderer, debug.fps_texture, nil, &fps_text_rect)
 }
