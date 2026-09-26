@@ -8,22 +8,21 @@ import ttf "vendor:sdl2/ttf"
 // ---- TYPES ----
 
 Debug :: struct {
-	debug_enabled: bool,
-	show_stats:    bool,
-	show_entities: bool,
-	show_player:   bool,
-	fps:           f32,
-	frame_time:    f32,
-	fps_timer:     f32,
-	fps_frames:    int,
-	frame_count:   u64,
-	fps_texture: ^sdl.Texture,
-	prev_fps: f32, 
-	fps_rect: sdl.Rect,
-
+	debug_enabled:      bool,
+	show_stats:         bool,
+	show_entities:      bool,
+	show_player:        bool,
+	fps:                f32,
+	frame_time:         f32,
+	fps_timer:          f32,
+	fps_frames:         int,
+	frame_count:        u64,
+	fps_texture:        ^sdl.Texture,
+	prev_fps:           f32,
+	fps_rect:           sdl.Rect,
 	game_state_texture: ^sdl.Texture,
-	prev_game_state: GameState,
-	game_state_rect: sdl.Rect,
+	prev_game_state:    GameState,
+	game_state_rect:    sdl.Rect,
 }
 
 // ---- INIT ----
@@ -59,10 +58,12 @@ debug_render :: proc(debug: ^Debug, assets: ^Assets, world: ^World, renderer: ^s
 
 	// Draw FPS
 	if debug.prev_fps != debug.fps || debug.fps_texture == nil {
-		fps_text := strings.clone_to_cstring(fmt.aprintf("FPS: %.1f", debug.fps, allocator = context.temp_allocator))
+		fps_text := strings.clone_to_cstring(
+			fmt.aprintf("FPS: %.1f", debug.fps, allocator = context.temp_allocator),
+		)
 		fps_surface := ttf.RenderText_Blended(assets.debug_font, fps_text, {255, 255, 255, 220})
 		defer sdl.FreeSurface(fps_surface)
-		defer sdl.DestroyTexture(debug.fps_texture)
+		sdl.DestroyTexture(debug.fps_texture)
 		debug.fps_texture = sdl.CreateTextureFromSurface(renderer, fps_surface)
 		fps_text_w: i32
 		fps_text_h: i32
@@ -74,19 +75,38 @@ debug_render :: proc(debug: ^Debug, assets: ^Assets, world: ^World, renderer: ^s
 			w = fps_text_w,
 			h = fps_text_h,
 		}
-	debug.prev_fps = debug.fps
+		debug.prev_fps = debug.fps
 	}
 	sdl.RenderCopy(renderer, debug.fps_texture, nil, &debug.fps_rect)
 
 	if debug.prev_game_state != world.state || debug.game_state_texture == nil {
-			game_state_text := strings.clone_to_cstring(fmt.aprintf("State: %v", world.state, allocator = context.temp_allocator))
-			game_state_surface := ttf.RenderText_Blended(assets.debug_font, game_state_text, {255, 255, 255, 220})
-			defer sdl.FreeSurface(game_state_surface)
-			defer sdl.DestroyTexture(debug.game_state_texture)
-			debug.game_state_texture = sdl.CreateTextureFromSurface(renderer, game_state_surface)
-			game_state_text_w: i32
-			game_state_text_h: i32
-			sdl.QueryTexture(debug.game_state_texture, nil, nil, &game_state_text_w, &game_state_text_h)
-			
+		game_state_text := strings.clone_to_cstring(
+			fmt.aprintf("State: %v", world.state, allocator = context.temp_allocator),
+		)
+		game_state_surface := ttf.RenderText_Blended(
+			assets.debug_font,
+			game_state_text,
+			{255, 255, 255, 220},
+		)
+		defer sdl.FreeSurface(game_state_surface)
+		sdl.DestroyTexture(debug.game_state_texture)
+		debug.game_state_texture = sdl.CreateTextureFromSurface(renderer, game_state_surface)
+		game_state_text_w: i32
+		game_state_text_h: i32
+		sdl.QueryTexture(
+			debug.game_state_texture,
+			nil,
+			nil,
+			&game_state_text_w,
+			&game_state_text_h,
+		)
+		debug.game_state_rect = sdl.Rect {
+			x = 15,
+			y = 15 + debug.fps_rect.h,
+			w = game_state_text_w,
+			h = game_state_text_h,
+		}
+		debug.prev_game_state = world.state
 	}
+	sdl.RenderCopy(renderer, debug.game_state_texture, nil, &debug.game_state_rect)
 }
