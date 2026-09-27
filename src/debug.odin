@@ -23,6 +23,9 @@ Debug :: struct {
 	game_state_texture: ^sdl.Texture,
 	prev_game_state:    GameState,
 	game_state_rect:    sdl.Rect,
+	wave_count_texture: ^sdl.Texture,
+	prev_wave_count:    int,
+	wave_count_rect:    sdl.Rect,
 }
 
 // ---- INIT ----
@@ -61,20 +64,15 @@ debug_render :: proc(debug: ^Debug, assets: ^Assets, world: ^World, renderer: ^s
 		fps_text := strings.clone_to_cstring(
 			fmt.aprintf("FPS: %.1f", debug.fps, allocator = context.temp_allocator),
 		)
-		fps_surface := ttf.RenderText_Blended(assets.debug_font, fps_text, {255, 255, 255, 220})
-		defer sdl.FreeSurface(fps_surface)
-		sdl.DestroyTexture(debug.fps_texture)
-		debug.fps_texture = sdl.CreateTextureFromSurface(renderer, fps_surface)
-		fps_text_w: i32
-		fps_text_h: i32
-		sdl.QueryTexture(debug.fps_texture, nil, nil, &fps_text_w, &fps_text_h)
-
-		debug.fps_rect = sdl.Rect {
-			x = 15,
-			y = 15,
-			w = fps_text_w,
-			h = fps_text_h,
-		}
+		debug_update_text(
+			renderer,
+			assets.debug_font,
+			fps_text,
+			&debug.fps_texture,
+			&debug.fps_rect,
+			15,
+			15,
+		)
 		debug.prev_fps = debug.fps
 	}
 	sdl.RenderCopy(renderer, debug.fps_texture, nil, &debug.fps_rect)
@@ -83,30 +81,62 @@ debug_render :: proc(debug: ^Debug, assets: ^Assets, world: ^World, renderer: ^s
 		game_state_text := strings.clone_to_cstring(
 			fmt.aprintf("State: %v", world.state, allocator = context.temp_allocator),
 		)
-		game_state_surface := ttf.RenderText_Blended(
+		debug_update_text(
+			renderer,
 			assets.debug_font,
 			game_state_text,
-			{255, 255, 255, 220},
+			&debug.game_state_texture,
+			&debug.game_state_rect,
+			15,
+			15 + debug.fps_rect.h,
 		)
-		defer sdl.FreeSurface(game_state_surface)
-		sdl.DestroyTexture(debug.game_state_texture)
-		debug.game_state_texture = sdl.CreateTextureFromSurface(renderer, game_state_surface)
-		game_state_text_w: i32
-		game_state_text_h: i32
-		sdl.QueryTexture(
-			debug.game_state_texture,
-			nil,
-			nil,
-			&game_state_text_w,
-			&game_state_text_h,
-		)
-		debug.game_state_rect = sdl.Rect {
-			x = 15,
-			y = 15 + debug.fps_rect.h,
-			w = game_state_text_w,
-			h = game_state_text_h,
-		}
 		debug.prev_game_state = world.state
 	}
 	sdl.RenderCopy(renderer, debug.game_state_texture, nil, &debug.game_state_rect)
+
+	if debug.prev_wave_count != world.level.wave_count || debug.wave_count_texture == nil {
+		wave_count_text := strings.clone_to_cstring(
+			fmt.aprintf(
+				"Wave Count: %d",
+				world.level.wave_count,
+				allocator = context.temp_allocator,
+			),
+		)
+		debug_update_text(
+			renderer,
+			assets.debug_font,
+			wave_count_text,
+			&debug.wave_count_texture,
+			&debug.wave_count_rect,
+			15,
+			15 + debug.fps_rect.h + debug.game_state_rect.h,
+		)
+		debug.prev_wave_count = world.level.wave_count
+	}
+	sdl.RenderCopy(renderer, debug.wave_count_texture, nil, &debug.wave_count_rect)
+}
+
+debug_update_text :: proc(
+	renderer: ^sdl.Renderer,
+	font: ^ttf.Font,
+	text: cstring,
+	texture: ^^sdl.Texture,
+	rect: ^sdl.Rect,
+	x, y: i32,
+) {
+	surface := ttf.RenderText_Blended(font, text, {255, 255, 255, 220})
+	defer sdl.FreeSurface(surface)
+	sdl.DestroyTexture(texture^)
+	texture^ = sdl.CreateTextureFromSurface(renderer, surface)
+
+	text_w: i32
+	text_h: i32
+	sdl.QueryTexture(texture^, nil, nil, &text_w, &text_h)
+
+	rect^ = sdl.Rect {
+		x = x,
+		y = y,
+		w = text_w,
+		h = text_h,
+	}
 }
