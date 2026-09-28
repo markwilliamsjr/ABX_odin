@@ -15,12 +15,9 @@
             "settings": {
                 "files.associations": {
                     "*.odin": "odin"
-                },
-                "ols.updates.askBeforeDownload": false,
-                "ols.server.path": "/opt/ols/ols"
+                }
             }
         }
     },
-
     "postCreateCommand": "bash .devcontainer/setup.sh"
 }
