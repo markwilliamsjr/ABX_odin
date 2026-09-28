@@ -1,3 +1,4 @@
+```bash
 #!/usr/bin/env bash
 
 set -euo pipefail
@@ -11,6 +12,7 @@ sudo apt-get install -y \
     lldb \
     gdb \
     pkg-config \
+    unzip \
     libsdl2-dev \
     libsdl2-image-dev \
     libsdl2-ttf-dev
@@ -40,9 +42,13 @@ echo "Odin:"
 odin version
 
 echo
-echo "Checking ABX..."
+echo "Installing OLS..."
 
-odin check src
+OLS_URL="https://github.com/DanielGavin/ols/releases/download/nightly/ols-x86_64-unknown-linux-gnu.zip"
 
-echo
-echo "ABX Codespace ready!"
+sudo mkdir -p /opt/ols
+
+curl -L "$OLS_URL" -o /tmp/ols.zip
+
+sudo unzip -
+```
