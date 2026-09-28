@@ -1,4 +1,3 @@
-```bash
 #!/usr/bin/env bash
 
 set -euo pipefail
@@ -39,3 +38,11 @@ sudo ln -sf "$ODIN_BIN" /usr/local/bin/odin
 echo
 echo "Odin:"
 odin version
+
+echo
+echo "Checking ABX..."
+
+odin check src
+
+echo
+echo "ABX Codespace ready!"
