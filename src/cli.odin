@@ -23,4 +23,14 @@ config_default :: proc(config: ^Config) {
 
 parse_args :: proc(config: ^Config, args: []string) -> CLI_State {
 	config_default(config)
+	index := 1 
+	for index < len(args) {
+		if args[index] == "--debug" {
+			config.debug = true
+			index += 1
+		} else {
+			fmt.printf("WRONG")
+			return ERROR
+		}
+	}
 }
