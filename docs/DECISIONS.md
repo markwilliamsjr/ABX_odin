@@ -202,26 +202,3 @@ systems risks rework.
   Their interaction with fleeing-driven difficulty is an open question: two
   escalating systems can stack multiplicatively and quietly break difficulty
   tuning, so this should be decided before tuning begins.
-
-## Housekeeping
-
-### Decision
-
-The root-level `abx_notes.org` symlink is a self-referential loop and can be
-removed.
-
-### Reason
-
-It is a broken symlink pointing to itself, almost certainly left behind when a
-file was moved or deleted. It is untracked by git and covered by `.gitignore`, so
-no source file or build step depends on it and removal leaves no trace in history.
-
-### Consequences
-
-- Nothing to recover from git history, and no cleanup commit needed.
-- Only a local working-directory artifact was affected.
-
-### Open question
-
-Whether the intended target held anything of value. Nothing in the repository
-references it.
