@@ -1,0 +1,150 @@
+#+title: ABX! Roadmap
+
+* ABX! Roadmap
+
+Organized by category. Ordered by dependency within each category.
+
+Categories marked [[file:docs/DECISIONS.md][Decisions]] reference the decision
+that established the work.
+
+** Current Slice
+
+Level advancement and transition, plus the minimum needed to observe it.
+
+*** Prerequisite: State and Input
+
+- [ ] Gate per-frame updates in ~main~ on ~world.state~
+  - Each state gets its own update set
+  - ~.Menu~ renders only; ~.Playing~ runs simulation; ~.Level_Transition~ runs
+    transition logic; ~.Paused~ / ~.Game_Over~ suspend simulation
+  - Extract ~update_simulation~ so per-state update sets stay visible in one
+    place rather than scattered through the loop
+- [ ] Add event handling to leave ~.Menu~ and enter ~.Playing~
+- [ ] Show a keybind hint on the menu so the entry action is discoverable
+- [ ] Wire ~.Paused~ and ~.Game_Over~ minimally so no ~GameState~ variant is a
+      dead enum value
+
+*** Prerequisite: Seeding
+
+- [ ] Add ~.Level~ to ~SeedCategory~
+- [ ] Pass a globally monotonic wave number to ~derive_seed~ for the ~.Wave~
+      category (replaces the hardcoded ~0~ in ~level_init~)
+- [ ] Seed the per-level wave-count draw from the ~.Level~ category
+- [ ] Seed the per-wave flee threshold from the ~.Level~ category
+- [ ] Verify no seed collision across levels
+
+*** Level and Wave Lifecycle
+
+- [ ] Add ~wave_index~ to ~Level~ (position within current level), keeping
+      ~wave_count~ as the global total; initialize both
+- [ ] Draw a level's wave count by seeded random draw, range growing with level,
+      clamped to ~MAX_WAVES~
+- [ ] Initialize all drawn waves in ~level_init~
+- [ ] Thread ~level_to_params(level)~ through, replacing the hardcoded ~1~
+- [ ] Advance ~wave_index~ when the active wave resolves
+- [ ] Mark the level complete when ~wave_index~ exceeds the level's wave count
+- [ ] Fix the debug overlay, which currently renders ~wave_count~ as a permanent
+      ~0~ because the field is never written
+
+*** Wave Resolution
+
+The actual core of the slice. Nothing currently detects that a wave has
+finished.
+
+- [ ] Add a flee threshold to ~Wave~, rolled once at ~wave_init~
+- [ ] Track per-wave resolved count, incrementing on death or flee
+- [ ] Complete the wave when resolved == ~spawn_count~ (not ~total_enemies~ —
+      spawning may not be finished)
+- [ ] Resolve the three cases explicitly: dead (resolved), fled (resolved and
+      scheduled to return), still alive (unresolved)
+- [ ] Decide wave membership tracking
+
+
+** Known trap: ~wave.enemy_indices~ indexes the flat ~bacteria.cold[]~ pool, and slots are recycled by ~find_free_bacteria_slot~. Once fleeing-and-returning exists, a returning bacterium can land in a recycled slot and be double-counted as resolved for the wrong wave. Membership must move onto the bacteria themselves, or returning bacteria need their own pool.
+
+*** Fleeing and Returning
+
+The difficulty-escalation engine, not an escape valve.
+
+- [ ] Flee remaining bacteria when remaining-alive drops below the rolled
+      threshold; resolve the wave at that moment
+- [ ] On flee, move bacteria into a pending roster that outlives the wave
+- [ ] Schedule return in a later wave, chosen from seeded RNG
+- [ ] On return, apply the chosen strengthening and resume normal state
+- [ ] Bound the roster against ~MAX_ENEMIES~; drop oldest when full
+- [ ] Decide whether level end ignores pending bacteria or waits for them
+
+*** Level Transition
+
+- [ ] Implement ~Level_Transition~ as a real state that does real work: hold the
+      frame, show the level number, advance
+- [ ] Make it the single owner of level progression: derive next level's seed,
+      draw its wave count, initialize its waves, reset per-level state
+- [ ] Confirm and remove ~Level.end_chance~, which appears superseded by the
+      rolled flee threshold
+
+*** Verification
+
+- [ ] Seeded replay: same seed, two runs, identical wave composition,
+      formations, flee thresholds, and return schedules
+- [ ] Different seeds produce observably different runs
+- [ ] Flee and return do not perturb determinism
+- [ ] Confirm ~sdl.GetTicks()~ appears in no generation or threshold decision
+
+
+** Verification is last by sequence, not by importance. Nothing in this slice is confirmed until it passes.
+
+*** Open Questions
+
+Blockers, not tasks. Each must be decided before the work that depends on it.
+
+- [ ] **Strengthening model** — health scaling, stat scaling, or tier promotion.
+      Blocks Fleeing and Returning.
+      Tier promotion connects to ~species_unlocked~, computed at
+      ~src/procedural.odin:124~ and never read.
+- [ ] **Return scope** — same level only, or carry into the next level?
+- [ ] **Identity on return** — keep identity for future kill-count tracking, or
+      fresh entity? Affects the wave-completion predicate.
+- [ ] **Boss meter interaction** — independent of flee difficulty, or stacking?
+      Two escalating systems can multiply and quietly break tuning.
+
+** Playability Gaps
+
+Unrelated to the slice above; found while assessing current state.
+
+- [ ] ~parse_args~ in ~src/cli.odin~ declares return type ~CLI_State~ with no
+      terminating return on the fall-through path. Looks like a compile error, or
+      the file is not in the build.
+- [ ] ~Config.seed~ and ~Config.level~ are never populated by ~parse_args~; only
+      ~--debug~ is handled, and any other argument prints ~WRONG~ and errors out.
+      A ~--seed~ flag would make Verification much easier to exercise.
+- [ ] ~species_unlocked~ is computed and never read; ~bacteria_spawn~ hardcodes
+      ~.Strep~ at ~src/level.odin:128~
+
+** Deferred
+
+Deliberately out of scope. Not to be started until the current slice lands.
+
+*** Skill Tree
+
+- [ ] Node graph, persistence across levels, UI, stat application
+- [ ] Mount into the existing ~Level_Transition~ state
+      - Not to be started until advancement, procgen, and formation gen are solid
+
+*** Boss Fights
+
+- [ ] Hidden boss meter filling across levels, resetting after a boss
+- [ ] Resolve interaction with fleeing-driven difficulty first
+
+*** Adaptive Wave Composition
+
+- [ ] Wave composition skewing toward species the player is not killing
+- [ ] Requires a kill-count system that does not exist yet
+- [ ] Fleeing-and-returning is a partial realization of this, not the whole of it
+
+*** Documentation
+
+- [ ] Add an explicit "current state" label to ~PROJECT.md~'s Current Systems
+      section, so it is distinguishable from ~ARCHITECTURE.md~ (see Decisions)
+- [ ] Update ~SESSION.md~ once the current slice completes
+- [ ] ~~Demo section in README.md is an empty heading~~
