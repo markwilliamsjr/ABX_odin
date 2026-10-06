@@ -28,6 +28,7 @@ SeedCategory :: enum {
 	Formation,
 	Entry,
 	Enemy,
+	Level,
 }
 
 FormationBounds :: struct {
