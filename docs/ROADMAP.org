@@ -68,11 +68,66 @@ The difficulty-escalation engine, not an escape valve.
 
 - [ ] Flee remaining bacteria when remaining-alive drops below the rolled
       threshold; resolve the wave at that moment
-- [ ] On flee, move bacteria into a pending roster that outlives the wave
-- [ ] Schedule return in a later wave, chosen from seeded RNG
-- [ ] On return, apply the chosen strengthening and resume normal state
+- [ ] On flee, move bacteria into a pending roster on ~World~, not ~Level~
+      - The roster survives level transitions; ~Level_Transition~ must not clear it
+- [ ] Queue each fleeing bacterium for the *next wave*, positionally — flee again
+      and it enters the wave after that
+      - A level never opens with a flood; the backlog arrives one wave at a time
+- [ ] Let carried bacteria flee again: fresh buff roll, fresh health restore, no
+      escape counter
+- [ ] On return, roll a resistance buff, restore health to spawn max, resume
+      normal state
 - [ ] Bound the roster against ~MAX_ENEMIES~; drop oldest when full
-- [ ] Decide whether level end ignores pending bacteria or waits for them
+      - Carrying across levels makes this bound do more work than it did when the
+        roster was level-scoped
+
+**** Fleeing Prohibited
+
+Required for the boss flush, though boss content is deferred. The roster cannot
+be escaped on indefinitely, so the 5-slot cap is what keeps escalation bounded —
+this is how that cap stops being exceeded.
+
+- [ ] Add a fleeing-prohibited flag to ~Level~, set when a level is a boss level
+- [ ] At such a level, do not roll a flee threshold and do not allow withdrawal —
+      all bacteria must be destroyed before advancing
+- [ ] Boss specifics deferred: separate level or special wave, whether the roster
+      enters or is spent before the boss. See Decisions for the reasoning that is
+      already settled.
+
+** Do not drop the roster at level end. Fleeing on the final wave of a level would
+otherwise be free — the level still completes and the bacteria are gone forever.
+Since the final wave is where the flee threshold is most likely to cross, that
+becomes the optimal strategy and defeats the whole escalation engine.**
+
+**** Resistance Buffs
+
+Strengthening is by resistance only. Bacteria never change species.
+
+- [ ] Add a ~BuffCategory~ enum: ~Hardy~, ~Resistant~, ~Biofilm~, ~Frenzied~
+- [ ] Hold buffs per-instance on ~BacteriaCold~ as a fixed-size array of
+      ~(category, magnitude)~ pairs — 5 slots, a compile-time constant
+      - Buffs cannot live in ~BACTERIA_DEFS~; it is ~const~ and species-indexed
+- [ ] Add a separate ~BUFF_DEFS~ table with absolute magnitudes
+      - Do NOT derive buff values from ~BACTERIA_DEFS~ — changing a bacterium's
+        base health would silently rescale every buff
+- [ ] Roll the category from the full set on each return; repeats allowed
+- [ ] Restore health to spawn max on return, which may be buff-boosted
+- [ ] Wire ~species_unlocked~ (~src/procedural.odin:124~) into spawning, so
+      ~bacteria_spawn~ stops hardcoding ~.Strep~ (~src/level.odin:128~)
+      - For spawn variety only; there is no promotion
+
+** Note: base stats are still in progress and not final. Do not tune buff
+magnitudes until they settle.**
+
+** Two stacking risks, both blocking tuning rather than implementation:
+
+- [ ] Frenzied stacking — a 5-stack Frenzied Pseudomonas at base speed 400,
+      multiplied by a wave ~speed_scalar~ already scaling per level block
+      (~src/procedural.odin:132~), risks an unplayable screen. Consider
+      additive-with-cap rather than free multiplication.
+- [ ] Resistant vs. weapon weakness — weapons deal 6 / 3 / 2 for effective /
+      neutral / ineffective (~src/player.odin:37~). A Resistant bacterium with the
+      wrong weakness could become effectively unkillable.
 
 *** Level Transition
 
@@ -98,15 +153,52 @@ The difficulty-escalation engine, not an escape valve.
 
 Blockers, not tasks. Each must be decided before the work that depends on it.
 
-- [ ] **Strengthening model** — health scaling, stat scaling, or tier promotion.
-      Blocks Fleeing and Returning.
-      Tier promotion connects to ~species_unlocked~, computed at
-      ~src/procedural.odin:124~ and never read.
-- [ ] **Return scope** — same level only, or carry into the next level?
-- [ ] **Identity on return** — keep identity for future kill-count tracking, or
-      fresh entity? Affects the wave-completion predicate.
+- [ ] **Does the flee threshold scale with buff count?** A carried bacterium
+      returns at full health with up to 5 buffs. If it can flee the instant the
+      threshold crosses, a heavily buffed bacterium barely participates and the
+      buff system feels pointless. Blocks Fleeing and Returning.
+- [ ] **At boss levels, disabled outright or permitted but buff-free?** Only
+      "disabled" makes "clear all bacteria" mean what it says. Deferred with the
+      rest of the boss specifics.
+- [ ] **Does the roster enter the boss level or get spent first?** Letting it
+      arrive makes the boss level the hardest thing in the game by design. Deferred.
 - [ ] **Boss meter interaction** — independent of flee difficulty, or stacking?
       Two escalating systems can multiply and quietly break tuning.
+- [ ] **Buff visual channel** — one outline per category is the current leaning,
+      held loosely. Species color already carries identity, so buffs need their own
+      channel. Not needed before the skill tree.
+
+** Resolved since the last update
+
+- Strengthening model — resistance buffs, not promotion. Bacteria never change
+  species.
+- Identity on return — kept. Same bacterium, same species.
+- Tier promotion — removed entirely; nothing to gate.
+- Return scope — roster carries across levels on ~World~, drains into the next
+  wave positionally, and carried bacteria may flee again.
+- Boss flush — bosses clear the roster; fleeing is prohibited there. Boss
+  specifics deferred.
+
+- [ ] **Flee threshold direction** — ~WaveParams.threshold = 0.8~
+      (~src/procedural.odin:127~) is ambiguous between fraction killed and fraction
+      remaining. Read as fraction remaining, 0.8 means bacteria flee while 80% are
+      still alive, inverting the difficulty. Blocks Wave Resolution.
+
+** Determinism
+
+Tracked separately from the slice: mixing a timing refactor into an advancement
+slice makes both harder to verify independently. See Decisions for the full rule.
+
+- [ ] Split ~delta_time~ (~src/game.odin:431~) into real elapsed time for motion
+      and a fixed-increment tick counter for decisions
+- [ ] Convert ~formation_complete_time~ (~src/level.odin:146~) from
+      ~sdl.GetTicks()~ to a tick count
+- [ ] Fix the always-true dive gate at ~src/level.odin:157~ — it never gated
+      anything, leaving ~formation_complete_time~ dead
+- [ ] Make ~formation_complete~ (~src/level.odin:136-148~) tick-driven rather than
+      derived from continuous motion; it is the one decision currently coupled to
+      wall-clock timing
+- [ ] Audit for further wall-clock reads feeding decisions
 
 ** Playability Gaps
 
@@ -118,8 +210,6 @@ Unrelated to the slice above; found while assessing current state.
 - [ ] ~Config.seed~ and ~Config.level~ are never populated by ~parse_args~; only
       ~--debug~ is handled, and any other argument prints ~WRONG~ and errors out.
       A ~--seed~ flag would make Verification much easier to exercise.
-- [ ] ~species_unlocked~ is computed and never read; ~bacteria_spawn~ hardcodes
-      ~.Strep~ at ~src/level.odin:128~
 
 ** Deferred
 

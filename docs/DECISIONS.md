@@ -71,11 +71,14 @@ threshold. That threshold is a seeded random draw, rolled **once per wave** at
 spawn time and compared deterministically on every subsequent frame.
 
 Fled bacteria are not removed. They withdraw and return in a later wave,
-strengthened.
+strengthened by **resistance buffs**. On return they are restored to spawn max
+health, which may itself be buff-boosted.
+
+Strengthening is by resistance only. **Bacteria never change species.**
 
 ### Reason
 
-Two separate reasons, both important.
+Three separate reasons.
 
 First, a single roll preserves determinism. A per-frame probabilistic roll would
 make runs irreproducible, contradicting the determinism principle in
@@ -85,6 +88,13 @@ Second, fleeing-and-returning is the difficulty-escalation mechanism that
 `ARCHITECTURE.md` describes as *"the next wave bacteria is determined by what the
 player is not killing."* Bacteria that fled are by definition bacteria the player
 did not kill. The document describes the effect; this specifies the cause.
+
+Third, bacteria develop resistance rather than transforming. Modelling real
+biology keeps `BACTERIA_DEFS` a clean const table, introduces no species mutation
+anywhere, and makes the return path simple — nothing about species needs tracking
+on a returning bacterium. An earlier draft of this decision specified tier
+promotion on return; that was rejected because it contradicts how bacteria
+actually behave.
 
 ### Consequences
 
@@ -96,23 +106,252 @@ did not kill. The document describes the effect; this specifies the cause.
 - A fled bacterium requires a pending roster that outlives the wave, so that
   roster lives on `Level` or `World`, not on `Wave`.
 - Return scheduling must use seeded RNG, or determinism breaks.
+- **Pending bacteria carry across level boundaries.** They do not die at the
+  end of a level. See "Return scope" below.
 - This is a *partial* realization of the architecture doc's adaptive bias. True
   wave-composition bias — skewing spawns toward species the player is not killing
   — remains separate, deferred work that depends on a kill-count system that does
   not exist.
 - Wall-clock time (`sdl.GetTicks()`) must not appear in any generation or
   threshold decision.
+- **No species promotion, ever.** An earlier decision to promote fleeing
+  bacteria only to already-unlocked species is superseded and no longer applies.
+  There is no promotion to gate.
+- `species_unlocked` (`src/procedural.odin:124`, computed but never read) is
+  still to be wired, but for **spawn variety**, not promotion.
+  `bacteria_spawn` currently hardcodes `.Strep` (`src/level.odin:128`), so the
+  game is one species throughout.
+
+## Return scope
+
+### Decision
+
+The pending roster lives on `World` and **survives level transitions**.
+
+A bacterium that flees enters the queue and appears in the **next wave** — read as
+a queue position, not a per-level dump. If it flees again, it enters the wave
+after that. A level therefore never opens with a flood; the backlog arrives one
+wave at a time.
+
+Carried bacteria **may flee again**, rolling a fresh buff and receiving a fresh
+health restore each time. There is no escape counter.
+
+At a **boss level, all bacteria must be destroyed** before the player can advance.
+Bosses are the pressure valve for the roster: fleeing is not permitted there, so a
+fully-stacked bacterium must finally be killed. The roster can therefore never
+exceed the 5 buff slots, and it only clears at a boss.
+
+Boss specifics — whether a boss is a separate level or a special wave, whether
+fleeing is disabled outright or permitted but buff-free, whether a threshold is
+rolled at all, and whether the roster enters or is spent before the boss — are
+**deferred**. Only the flush behaviour is decided.
+
+### Reason
+
+Carrying was chosen over dropping the roster at level end, and over special-casing
+the final wave.
+
+Dropping creates an exploit: fleeing on the **last wave** of a level would be free,
+because the level still counts as complete and the bacteria are gone forever. That
+is not an edge case — the final wave is precisely where the flee threshold is most
+likely to be crossed, so "let them all run on the last wave" becomes the optimal
+strategy and defeats the escalation engine entirely.
+
+Special-casing the final wave was rejected because it makes the level's climax
+play by different rules than every other wave, and in the wrong direction: the last
+wave would become *less* dangerous, which is backwards.
+
+Carrying has no such problem, and its accumulation cost is already bounded by the
+existing requirement to cap the roster against `MAX_ENEMIES`.
+
+Bosses as the flush point are what make indefinite re-fleeing acceptable. Without a
+periodic hard-clear, a bacterium could be escaped on indefinitely and the 5-slot cap
+becomes the only thing holding the whole system together. With it, escapes are
+bounded across a run and the roster develops a rhythm — build up, flush, rebuild —
+rather than a monotonic ramp.
+
+Disabling fleeing at boss levels also dissolves a problem that otherwise needs its
+own rule: what happens when a bacterium with a full roster of 5 buffs escapes a
+sixth time. No slot-replacement or discard rule is needed, because the cap can
+never be exceeded.
+
+### Consequences
+
+- The roster lives on `World`, not `Level`. `Level_Transition` must **not** clear
+  it — a change to what that state does when resetting per-level state.
+- **No escape counter** exists on a bacterium. The 5-slot cap is load-bearing, not
+  merely a safety bound.
+- Because a carried bacterium can be escaped on repeatedly, the roster can grow
+  faster than fresh spawns. Late levels risk becoming a wall of returning bacteria
+  rather than a mix. A tuning concern, not a structural one.
+- The boss system stops being purely cosmetic. The roadmap lists boss fights as
+  deferred, but the flush behaviour is now part of the difficulty architecture and
+  cannot be designed entirely later.
+- At minimum, the current slice needs a way to mark a level as **fleeing
+  prohibited**, even with no boss content. That is a small addition, but it means
+  this slice is not fully independent of the deferred boss system.
+- It is expected that bosses are infrequent — the meter in `ARCHITECTURE.md` is
+  hidden and fills across levels — so escapes remain freely stackable *between*
+  bosses. That appears intended rather than a gap.
 
 ### Open questions (not yet decided)
 
-- **Strengthening model.** Health scaling, stat scaling, or tier promotion.
-  Tier promotion would connect to `species_unlocked`, which is computed at
-  `src/procedural.odin:124` and never read.
-- **Return scope.** Same level only, or do pending bacteria carry into the next
-  level?
-- **Identity on return.** Does a returning bacterium keep its identity, enabling
-  future kill-count tracking, or is it a fresh entity? This affects the
-  wave-completion predicate.
+- **Does the flee threshold scale with buff count?** A carried bacterium returns
+  at full health with up to 5 buffs. If it can flee the instant the threshold is
+  crossed, a heavily buffed bacterium barely participates, and the buff system
+  feels pointless — the player earns the escalation and gets nothing from it.
+  Suggestion: a stacked bacterium should fight harder before escaping.
+- **At boss levels, is fleeing disabled outright, or permitted but buff-free?**
+  Only "disabled" makes "clear all bacteria" mean what it says.
+- **Does the roster enter the boss level, or is it spent first?** Letting it arrive
+  means the boss level is the hardest thing in the game by design — the player
+  brings their worst case and must finally kill it. This appears dramatically
+  stronger than flushing beforehand, but it is unconfirmed.
+- **Boss shape.** Separate level, or special wave within a level? If a special
+  wave, the other waves in that level follow normal flee rules.
+
+## Resistance buffs
+
+### Decision
+
+Fleeing bacteria gain resistance buffs on return. Buffs are per-instance, held in
+a fixed-size array of **5** slots on `BacteriaCold`. Each escape rolls a category
+from the full set, so repeats are allowed by design.
+
+Categories for v1, one per axis: **Hardy** (+max health), **Resistant** (reduced
+damage taken), **Biofilm** (absorbs the first N hits), **Frenzied** (+speed).
+
+A returning bacterium keeps its identity and species. Health is restored to spawn
+max, which may itself be buff-boosted.
+
+### Reason
+
+Resistance is the correct model for bacteria under pressure, and it keeps species
+definitions immutable. Five slots is enough to feel consequential while remaining
+a fixed compile-time constant, which suits the existing SoA layout — buff data
+cannot live in `BACTERIA_DEFS`, since that is a `const` array indexed by species and
+buffs vary per individual.
+
+Rolling from the full set rather than excluding held categories was chosen for
+simplicity and for greater variance in resulting stacks.
+
+### Consequences
+
+- **Buffs live on the bacteria instance**, not in `BACTERIA_DEFS`.
+- **Each escape is a compounding gain**: a buff plus a free full-health restore,
+  while the rest of the wave stays at spawn baseline. Failure makes the game
+  harder, which is thematically intended, but growth is multiplicative rather than
+  additive. The 5-slot cap is the bound, and because carried bacteria can be
+  escaped on indefinitely, that cap is load-bearing rather than merely a safety
+  net. Boss levels are what keep it from being exceeded.
+- **The specific runaway risk is Frenzied stacking.** A 5-stack Frenzied
+  Pseudomonas at base speed 400, multiplied by a wave `speed_scalar` that already
+  scales with level block (`src/procedural.odin:132`), could produce an
+  unplayable screen.
+- **`Resistant` interacts with the weapon weakness system.** Weapons deal 6 / 3 / 2
+  for effective / neutral / ineffective (`src/player.odin:37`). A Resistant
+  bacterium with the wrong weakness could become effectively unkillable.
+- **Base stats are not final**, so buff magnitudes must not be tuned yet. They are
+  to be stored as absolute values in a separate `BUFF_DEFS` table, deliberately
+  **not** derived from `BACTERIA_DEFS` — otherwise changing a bacterium's base
+  health silently rescales every buff.
+- Buffs need a visual tell, or the player cannot learn to prioritize. Species color
+  already carries identity (`r/g/b` per species, with Staph, Ecoli, and
+  Pseudomonas all 50x50 in distinct colors), so the buff visual needs its own
+  channel rather than competing for color.
+
+### Open questions (not yet decided)
+
+- **Should Frenzied be additive-with-cap rather than freely multiplicative?**
+  Blocks tuning.
+- **Does Resistant stack multiplicatively with weapon weakness?** Could make a
+  bacterium effectively immune.
+- **What visual channel do buffs use?** One outline per category is the current
+  leaning, held loosely. Does not need resolving before the skill tree.
+
+Return scope is settled — see the "Return scope" section above.
+
+## Determinism
+
+### Decision
+
+Determinism means **deterministic decisions with continuous motion** — reading C
+from the three options considered.
+
+Concretely, two separate clocks:
+
+- A **tick counter** that increments by a fixed amount each update. Every decision
+  and every branch point reads this.
+- **Real elapsed time**, used only for how far things move. Never for decisions.
+
+No decision may read wall-clock time. A decision may depend on continuous motion
+only when that motion is itself tick-driven.
+
+Recorded input replay is explicitly **not** in scope. If that need ever arises, it
+is a tooling decision to make when the first such test is written, not an
+architecture decision made now.
+
+### Reason
+
+Three readings of "same seed, same results" were considered:
+
+- **A — generated content identical.** Nearly free; already true of the
+  generation code, which derives everything from `derive_seed` at init before any
+  player input exists. Does not make gameplay debuggable.
+- **B — full run identical including outcomes.** Requires recorded input, a fixed
+  timestep, and bit-exact float determinism maintained indefinitely. Delivers a
+  regression-testing tool, not a player-facing feature.
+- **C — deterministic decisions, continuous motion.** Keeps A's guarantee, and
+  makes replay debuggable: a bug report about a level 7 wave 3 flee threshold can
+  be reproduced exactly, because thresholds and waves are identical even though
+  the player's kills may differ.
+
+C was chosen as the only reading that both holds the determinism guarantee and
+stays achievable for an interactive game. B was rejected because a human player
+could never observe it without replaying a recorded input stream, and because it
+demands float-exact discipline forever.
+
+Note that `PROJECT.md` already scopes this correctly: it asks for *"fun,
+deterministic enemy waves"* — waves, not runs.
+
+### Consequences
+
+- **The simulation is currently non-deterministic and violates this rule.** Three
+  sites need fixing:
+  - `src/level.odin:146` — `formation_complete_time = u64(sdl.GetTicks())` must
+    become a tick count.
+  - `src/level.odin:157` — `if u64(sdl.GetTicks()) >= wave.formation_complete_time`
+    is **always true**, since ticks only increase. The dive gate has never
+    actually gated anything, and `formation_complete_time` is currently dead.
+  - `src/game.odin:431` — `delta_time` derived from `GetTicks()` must be split:
+    real elapsed time for motion, fixed increments for the tick counter.
+- **`formation_complete` is the one real threat to this rule.** It is a decision
+  derived from continuous motion: whether every bacterium has finished its entry
+  path depends on accumulated time, so it could land on different ticks across
+  runs and diverge everything downstream. It must become tick-driven. The rule's
+  third clause exists specifically to forbid this coupling.
+- **Two alternatives were rejected.** Fixed timestep throughout the main loop is
+  the textbook answer but changes game feel, which is not worth paying for yet.
+  Making the decision unconditioned on motion (a seeded fixed delay) is cheapest
+  but decouples the fiction — the formation could "complete" while bacteria are
+  visibly still in flight.
+- **Scope:** this decision is recorded now so later work does not violate it. The
+  `delta_time` refactor itself is tracked separately from level advancement,
+  because mixing a timing refactor into an advancement slice makes both harder to
+  verify independently. The door is left open for fixed timestep later — it becomes
+  a small change under this model, not a rewrite.
+- **Verification means "generate twice, compare," plus "same branch events."** It
+  does not mean identical runs. Identical *flee behavior* is untestable with a
+  human at the controls and should not be asserted.
+
+### Open question (not yet decided)
+
+- **What "same seed, same results" means is now settled, but the flee threshold
+  direction is not.** The existing `WaveParams.threshold = 0.8`
+  (`src/procedural.odin:127`) is ambiguous between *fraction killed* and *fraction
+  remaining*. Read as "fraction remaining," 0.8 would mean bacteria flee while 80%
+  are still alive, which inverts the intended difficulty. Decide the direction, and
+  express it unambiguously in code rather than as a bare float.
 
 ## State machine
 
