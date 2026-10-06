@@ -385,18 +385,44 @@ skill tree mounts into an existing state rather than requiring a rewrite.
 Add `.Level` to the existing `SeedCategory` enum rather than reusing `.Wave`
 with a distinguishing number.
 
+Derive seeds by **chaining**, not by a single global counter: a level derives from
+the run seed by level number, and each wave derives from its level seed by its
+index within that level.
+
 ### Reason
 
 Self-documenting, and avoids overloading an existing category with a second
 meaning.
 
+A global monotonic wave number was considered and rejected. It requires cumulative
+state threaded through level transition, and to number level 9's waves you must
+already know how many waves levels 1-8 drew — which are themselves seeded draws.
+That makes a wave's seed depend on run history rather than on its position, and
+draws a level's wave count before any wave can be named.
+
+Chaining satisfies the same uniqueness requirement with no accumulated state, and
+keeps the invariant checkable locally: every `(parent, category, number)` triple
+appears once.
+
 ### Consequences
 
-- `derive_seed` numbers must be **globally monotonic across an entire run**, not
-  per-level. `level_init` currently passes a hardcoded `0`; without a global wave
-  number, wave 1 of level 5 and wave 1 of level 9 receive identical seeds.
-- Every `derive_seed` call must use a `(category, number)` pair that is unique
-  across a full run. Same seed in, same run out.
+- The uniqueness invariant is **per parent**, not global. No `(parent_seed,
+  category, number)` triple may be reached twice in a run; the same
+  `(category, number)` under a different parent is fine. This replaces the earlier
+  requirement that `(category, number)` be unique across a full run, which chaining
+  makes both unnecessary and misleading.
+- `level_init` must draw the level's wave count *before* initializing any wave.
+  The loop index is the wave index.
+- `level_seed` carries per-level decisions, `wave_seed` carries per-wave ones. The
+  flee threshold is `derive_seed(wave_seed, .Level, 0)` rather than a `.Level`
+  number on the level seed, so no `.Level` number's meaning depends on how many
+  waves a level happened to draw.
+- A wave seed is a pure function of `(run seed, level, wave index)` and can be
+  recomputed without simulating anything.
+- `.Level` no longer means "level number" below the root derivation; it is reused
+  for per-level draws with small numbers. A second category would restore strict
+  meaning but is not worth it at this call count.
+- Same seed in, same run out.
 
 ## Scope
 

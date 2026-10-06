@@ -90,6 +90,29 @@ periodic hard-clear, a bacterium could be escaped on indefinitely; with it,
 escapes are bounded across a run and the roster develops a rhythm — build up,
 flush, rebuild — rather than a monotonic ramp.
 
+## Seeding
+
+Every generated value is derived from the run seed through `derive_seed`, which
+hashes a `(category, number)` pair against a parent seed. The derivation graph is a
+**chain of trees** rooted at the run seed:
+
+```
+root
+└─ derive_seed(root, .Level, level_number)     → level_seed
+   ├─ derive_seed(level_seed, .Level, 0)       → the level's wave count
+   ├─ derive_seed(level_seed, .Wave, i)        → wave_seed, i = 0..wave_count-1
+   │  └─ derive_seed(wave_seed, .Entry, 0)    → entry path rng
+   └─ derive_seed(wave_seed, .Level, 0)        → that wave's flee threshold
+```
+
+`level_seed` carries per-level decisions; `wave_seed` carries per-wave decisions.
+A wave's index within its level is its seed key, so a wave seed is a pure function
+of `(run seed, level, wave index)` and needs no run history to recompute.
+
+The invariant is that no `(parent_seed, category, number)` triple is ever reached
+twice in a run. The same `(category, number)` under a *different* parent is fine —
+this is what lets `.Level` name both a level and a decision made within it.
+
 ## Determinism
 
 The same seed produces the same generated content. Determinism covers *decisions*,

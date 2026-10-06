@@ -59,8 +59,13 @@ decision may read wall-clock time. Recorded input replay explicitly out of scope
 feature is runnable when it lands. The skill tree waits until advancement, procgen,
 and formation gen are solid.
 
-**Seeding.** Added `.Level` to `SeedCategory`. `derive_seed` numbers must be
-globally monotonic across a whole run.
+**Seeding.** Added `.Level` to `SeedCategory`. Seeds chain rather than counting
+globally: `level_seed = derive_seed(run_seed, .Level, level_number)`, then
+`wave_seed = derive_seed(level_seed, .Wave, wave_index)`. The uniqueness invariant
+is per `(parent, category, number)` triple. A global monotonic wave number was
+considered and rejected — it needs cumulative state threaded through level
+transition, and numbering level 9's waves requires already knowing how many waves
+earlier levels drew.
 
 ## Problems discovered
 
@@ -89,8 +94,8 @@ globally monotonic across a whole run.
   flat `bacteria.cold[]` pool, and slots are recycled by `find_free_bacteria_slot`.
   Once bacteria leave and return, one can land in a recycled slot and be counted
   as resolved for the wrong wave.
-- `derive_seed(seed, .Wave, 0)` passes a hardcoded `0`, so without a global wave
-  number different levels get identical wave seeds.
+- `derive_seed(seed, .Wave, 0)` passes a hardcoded `0`, so different levels get
+  identical wave seeds. Fixed by chaining, not by a global wave counter.
 - `parse_args` (`src/cli.odin:24`) declares return type `CLI_State` with no
   terminating return. Looks like a compile error, or the file is not in the build.
   `Config.seed` and `Config.level` are never populated; only `--debug` is handled.
@@ -105,6 +110,10 @@ Docs updated: `ARCHITECTURE.md` rewritten to match the settled design;
 `DECISIONS.md` filled in (was empty); `ROADMAP.org` populated (was an empty
 heading); plan written to `~/.opencode/plan/level-advancement.md` with 8 tasks
 in dependency order.
+
+Follow-up: seeding settled on chaining (see Decisions → Seeding), with the
+per-wave flee threshold drawn from `wave_seed` rather than the level seed. Plan
+written to `~/.opencode/plan/seed-chaining.md`.
 
 ## Next step
 

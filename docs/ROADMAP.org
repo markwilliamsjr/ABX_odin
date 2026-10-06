@@ -18,9 +18,15 @@ prerequisite for Level and Wave Lifecycle — the first category that produces
 visible behavior.
 
 - [x] Add ~.Level~ to ~SeedCategory~
-- [ ] Pass a globally monotonic wave number to ~derive_seed~ for the ~.Wave~
-      category (replaces the hardcoded ~0~ in ~level_init~)
-- [ ] Seed the per-level wave-count draw from the ~.Level~ category
+- [ ] Chain wave seeds from a per-level seed rather than from the run seed
+      directly (replaces the hardcoded ~0~ in ~level_init~)
+  - ~level_seed = derive_seed(run_seed, .Level, level_number)~
+  - ~wave_seed = derive_seed(level_seed, .Wave, wave_index)~
+  - Uniqueness invariant is per ~(parent, category, number)~ triple, not a global
+    wave counter. See Decisions for why the global counter was rejected.
+- [ ] Seed the per-level wave-count draw from ~derive_seed(level_seed, .Level, 0)~
+- [ ] Seed the per-wave flee threshold from ~derive_seed(wave_seed, .Level, 0)~,
+      not from a level seed number
 - [ ] Seed the per-wave flee threshold from the ~.Level~ category
 - [ ] Verify no seed collision across levels
 
