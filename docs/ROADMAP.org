@@ -11,27 +11,41 @@ that established the work.
 
 Level advancement and transition, plus the minimum needed to observe it.
 
-*** Prerequisite: State and Input
+*** Prerequisite: Seeding  ← START HERE
 
-- [ ] Gate per-frame updates in ~main~ on ~world.state~
-  - Each state gets its own update set
-  - ~.Menu~ renders only; ~.Playing~ runs simulation; ~.Level_Transition~ runs
-    transition logic; ~.Paused~ / ~.Game_Over~ suspend simulation
-  - Extract ~update_simulation~ so per-state update sets stay visible in one
-    place rather than scattered through the loop
-- [ ] Add event handling to leave ~.Menu~ and enter ~.Playing~
-- [ ] Show a keybind hint on the menu so the entry action is discoverable
-- [ ] Wire ~.Paused~ and ~.Game_Over~ minimally so no ~GameState~ variant is a
-      dead enum value
+The only item with no dependencies and no open question blocking it, and a
+prerequisite for Level and Wave Lifecycle — the first category that produces
+visible behavior.
 
-*** Prerequisite: Seeding
-
-- [ ] Add ~.Level~ to ~SeedCategory~
+- [x] Add ~.Level~ to ~SeedCategory~
 - [ ] Pass a globally monotonic wave number to ~derive_seed~ for the ~.Wave~
       category (replaces the hardcoded ~0~ in ~level_init~)
 - [ ] Seed the per-level wave-count draw from the ~.Level~ category
 - [ ] Seed the per-wave flee threshold from the ~.Level~ category
 - [ ] Verify no seed collision across levels
+
+** Verifiable without playing the game — log the derived seeds and confirm
+different levels and waves produce different numbers. Note that ~level_init~
+currently passes a hardcoded ~0~, so wave 1 of level 5 and wave 1 of level 9
+receive identical seeds. This category fixes a real latent determinism bug.**
+
+*** Prerequisite: State and Input
+
+- [ ] Gate per-frame updates in ~main~ on ~world.state~
+  - Each state gets its own update set
+  - ~.Menu~ renders only; ~.Playing~ runs simulation; ~.Level_Transition~ runs
+    transition logic; ~.Paused~ suspends simulation
+  - Extract ~update_simulation~ so per-state update sets stay visible in one
+    place rather than scattered through the loop
+- [ ] Add event handling to leave ~.Menu~ and enter ~.Playing~
+- [ ] Show a keybind hint on the menu so the entry action is discoverable
+
+** ~.Game_Over~ is deliberately left unreachable for now, and stays a dead enum
+value. It has no trigger: the player has no health field, nothing detects
+player-bacteria collision (~collision_update~, ~src/game.odin:166~, tests bullets
+against bacteria only), and no damage is ever applied to the player. Making it
+reachable means inventing a death condition, which is a design decision rather
+than a cleanup. Recorded here so it does not read as an oversight.**
 
 *** Level and Wave Lifecycle
 
@@ -153,6 +167,12 @@ magnitudes until they settle.**
 
 Blockers, not tasks. Each must be decided before the work that depends on it.
 
+- [ ] **Flee threshold direction** — ~WaveParams.threshold = 0.8~
+      (~src/procedural.odin:127~) is ambiguous between fraction destroyed and
+      fraction remaining. Read as fraction remaining, 0.8 means bacteria flee
+      while 80% are still alive, inverting the difficulty.
+      *Blocks Wave Resolution — the only open question that blocks
+      implementation.*
 - [ ] **Does the flee threshold scale with buff count?** A carried bacterium
       returns at full health with up to 5 buffs. If it can flee the instant the
       threshold crosses, a heavily buffed bacterium barely participates and the
@@ -178,11 +198,8 @@ Blockers, not tasks. Each must be decided before the work that depends on it.
   wave positionally, and carried bacteria may flee again.
 - Boss flush — bosses clear the roster; fleeing is prohibited there. Boss
   specifics deferred.
-
-- [ ] **Flee threshold direction** — ~WaveParams.threshold = 0.8~
-      (~src/procedural.odin:127~) is ambiguous between fraction killed and fraction
-      remaining. Read as fraction remaining, 0.8 means bacteria flee while 80% are
-      still alive, inverting the difficulty. Blocks Wave Resolution.
+- ~.Game_Over~ scoping — left unreachable for now; it has no trigger. Recorded
+  under Prerequisite: State and Input.
 
 ** Determinism
 
