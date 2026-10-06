@@ -49,10 +49,10 @@ Wave :: struct {
 }
 
 Level :: struct {
-	wave:              [MAX_WAVES]Wave,
-	wave_count, level: int,
-	level_end:         bool,
-	end_chance:        f32,
+	wave:                     [MAX_WAVES]Wave,
+	wave_count, level_number: int,
+	level_end:                bool,
+	end_chance:               f32,
 }
 
 // ---- Init ----
@@ -98,9 +98,16 @@ wave_init :: proc(wp: ^WaveParams, wave: ^Wave, wave_seed: u64) {
 	wave.formation_complete = false
 }
 
-level_init :: proc(bacteria: ^Bacteria, level: ^Level, seed: u64) {
-	wave_seed := derive_seed(seed, .Wave, 0)
-	level_params := level_to_params(1)
+level_init :: proc(bacteria: ^Bacteria, level: ^Level, master_seed: u64, level_number: int) {
+	level.level_number = level_number
+	level_seed := derive_seed(master_seed, .Level, level.level_number)
+	wave_seed := derive_seed(level_seed, .Wave, 0)
+	level_params := level_to_params(level.level_number)
+
+	wave_rng_state := rand.create(derive_seed(level_seed, .Level, 0))
+	wave_rng := runtime.default_random_generator(&wave_rng_state)
+	level.wave_count = wave_count_picker(level.level_number, wave_rng)
+
 	wave_init(&level_params, &level.wave[0], wave_seed)
 }
 
@@ -198,4 +205,17 @@ generate_entry_points :: proc(
 	}
 	result.count = rules.count
 	return result, true
+}
+
+wave_count_picker :: proc(level: int, wave_rng: runtime.Random_Generator) -> int {
+	block_number := (level - 1) / 5
+	min := 1 + block_number * 2
+	max := min + 3
+	if min > MAX_WAVES && max > MAX_WAVES {
+		return rand.int_range(MAX_WAVES, MAX_WAVES, wave_rng)
+	}
+	if max > MAX_WAVES {
+		return rand.int_range(min, MAX_WAVES, wave_rng)
+	}
+	return rand.int_range(min, max, wave_rng)
 }

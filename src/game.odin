@@ -25,7 +25,7 @@ WEAPON_COUNT :: 50
 MAX_BULLETS :: 50
 MAX_ENEMIES :: 50
 MAX_WAVES :: 10
-MAX_REGIONS :: 4
+MAX_REGIONS :: 10
 
 // ---- Types ----
 
@@ -108,10 +108,10 @@ game_init :: proc(game: ^Game) {
 	debug_init(&game.debug)
 }
 
-world_init :: proc(world: ^World, seed: u64) {
+world_init :: proc(world: ^World, master_seed: u64) {
 	world.state = .Menu
 	world.player = player_init(SCREEN_WIDTH, SCREEN_HEIGHT)
-	level_init(&world.bacteria, &world.level, seed)
+	level_init(&world.bacteria, &world.level, master_seed, 1)
 }
 
 assets_init :: proc(asset: ^Assets, renderer: ^sdl.Renderer) {
