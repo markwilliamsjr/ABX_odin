@@ -230,5 +230,5 @@ threshold_picker :: proc(level: int, wave_rng: runtime.Random_Generator) -> int 
 	t := clamp(f32(level - 1) / 20, 0, 1)
 	base := 500 + 225 * (1 + math.cos(math.PI * t))
 	spread := f32(rand.int_range(-50, 50, wave_rng))
-	return int(clamp(base + spread, 500, 950))
+	return int(clamp(base + spread, 500, 1000))
 }

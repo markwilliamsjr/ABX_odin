@@ -30,12 +30,18 @@ visible behavior.
 - [x] Seed the per-level wave-count draw from ~derive_seed(level_seed, .Level, 0)~
   - Each draw site constructs its own throwaway RNG, so any draw is recomputable
     from its triple alone with no shared generator
-- [ ] Seed and assign the per-wave flee threshold from
+- [x] Seed and assign the per-wave flee threshold from
       ~derive_seed(wave_seed, .Level, 0)~, not from a level seed number
-  - ~Wave.threshold~ is never assigned by ~wave_init~ today, so this is an
-    assign-and-seed task, not only a seeding task
-  - Design settled, not yet implemented. See Threshold design below.
-  - Scope is assign-and-display only. Nothing reads the threshold yet; the
+  - ~threshold_picker~ (~src/level.odin:230~), drawn inside ~wave_init~ from a
+    second throwaway state built off ~wave_seed~, so the whole result is
+    recomputable from the triple alone
+  - ~wave_init~ now takes ~level_number~ explicitly rather than reading it from
+    ~WaveParams~, so the curve's input is visible at the call site instead of
+    arriving through a params struct that step 4 was deleting anyway
+  - ~WaveParams.threshold~ removed, so the seed is the only source of a
+    threshold. ~Wave.threshold~ renamed ~threshold_permille~ and retyped to
+    ~int~.
+  - Scope was assign-and-display only. Nothing reads the threshold yet; the
     crossing test and the membership problem belong to Wave Resolution
 - [ ] Verify no seed collision across levels
   - Blocked until ~level_init~ initializes every drawn wave; only wave 0 exists
@@ -54,7 +60,7 @@ master_seed
   └─ .Level, level_number → level_seed        (level_init)
        ├─ .Wave, 0        → wave_seed         (level_init)
        │    ├─ .Entry, 0 → entry points      (wave_init)
-       │    └─ .Level, 0 → flee threshold    (wave_init, pending)
+       │    └─ .Level, 0 → flee threshold    (wave_init)
        └─ .Level, 0       → wave-count draw   (level_init)
 #+end_example
 
@@ -62,7 +68,7 @@ Six distinct ~(parent, category, number)~ triples, no reuse. Three of them reuse
 the ~.Level~ category with a small number below the root derivation, which the
 Decision sanctions.
 
-** Threshold design (settled, not yet implemented)
+** Threshold design (implemented)
 
 The flee threshold is a per-wave seeded draw from ~derive_seed(wave_seed, .Level, 0)~
 — one independent draw per wave, so waves within a level differ from each other
@@ -78,27 +84,41 @@ rather than sharing a level-wide value.
 - **Curve** — a half cycle of a raised cosine, crest to trough:
   ~t = clamp((level-1)/20, 0, 1)~, ~base = 500 + 225 * (1 + cos(pi*t))~.
   Flat at both ends, steepest mid-curve.
-- **Per-wave spread** — ~±50~ around the base, clamped to ~[500, 990]~. Keeps
-  waves within a level distinct without making variance a second difficulty knob.
+- **Per-wave spread** — ~±50~ around the base. Keeps waves within a level
+  distinct without making variance a second difficulty knob. Two separate bounds
+  do different jobs: 500 is the chosen floor, and the 1000 upper bound is what
+  keeps the value crossable.
+  - The clamp is applied *after* the spread, so an upper bound below 1000
+    truncates the positive half of the draw at early levels — the coin flip goes
+    one-sided until ~base~ drops clear of it. ~base + spread~ peaks at exactly
+    1000 at level 1, so the bound is exactly sufficient and the spread stays
+    symmetric everywhere.
 
 ** Deliberately provisional: the 500 floor and the /20 span were picked for shape,
 not for balance, and are expected to be tuned in play.**
 
 | level | base | enemies (~3 + level*2~) | kills to cross | flee |
 |-------+------+-------------------------+-----------------+------|
-|     1 |  950 |                        5 |               5 | no  |
-|     2 |  947 |                        7 |               7 | no  |
-|     3 |  939 |                        9 |               9 | no  |
-|     4 |  925 |                       11 |              11 | no  |
-|     5 |  907 |                       13 |              12 | 1    |
-|    10 |  785 |                       23 |              19 | 4    |
-|    15 |  593 |                       33 |              20 | 13   |
-|    20 |  503 |                       43 |              22 | 21   |
-|   21+ |  500 |                       45+|               — | ~half|
+|     1 |  950.0 |                     5 |               5 | no  |
+|     2 |  947.2 |                     7 |               7 | no  |
+|     3 |  939.0 |                     9 |               9 | no  |
+|     4 |  925.5 |                    11 |              11 | no  |
+|     5 |  907.0 |                    13 |              12 | 1    |
+|     6 |  884.1 |                    15 |              14 | 1    |
+|    10 |  760.2 |                    23 |              18 | 5    |
+|    15 |  592.7 |                    33 |              20 | 13   |
+|    20 |  502.8 |                    43 |              22 | 21   |
+|   21+ |  500.0 |                    45+|               — | ~half|
 
 Nothing flees through level 4; one flees at level 5. The ±50 spread is what makes
 that "possibly" one — at level 5 the band is 857–957, crossing at either 12 or 13
 kills.
+
+** Recomputed after the amplitude was corrected from 255 to 225. An earlier
+version of this table was written against ~600 + 255 * (1 + cos)~, whose crest
+reached 1110 — a value no wave could ever cross, which silently disabled fleeing
+for the first several levels. The corrected numbers are what ~threshold_picker~
+now produces; the code is right and this table was catching up.**
 
 ** Two consequences to watch in play, both from threshold descending while wave
 size grows:
@@ -175,11 +195,15 @@ than a cleanup. Recorded here so it does not read as an oversight.**
 - [x] Fix the debug overlay, which rendered ~wave_count~ as a permanent ~0~
       because the field was never written
 - [ ] Show ~wave_index~ in the overlay once ~Level~ has the field
-- [ ] Show ~threshold_permille~ in the overlay
-  - Lands with the threshold seeding item. This is the "generate twice, compare"
-    check made visible, and the only way to observe the draw before Wave
-    Resolution reads it. Only ~wave[0]~ is initialized today, so the line reads
-    from ~wave[0]~
+- [x] Show ~threshold_permille~ in the overlay
+  - Third text line in the stack, under wave count. This is the "generate twice,
+    compare" check made visible, and the only way to observe the draw before
+    Wave Resolution reads it
+  - Reads from ~wave[0]~; only wave 0 is initialized today
+  - Note: ~debug.fps~ changes every frame, so the *FPS* line rebuilds its texture
+    60 times a second via ~DestroyTexture~ + ~CreateTextureFromSurface~. That is
+    the overlay's real per-frame cost and it is pre-existing — do not go looking
+    for it in the threshold line
 
 *** Wave Resolution
 
@@ -288,9 +312,9 @@ magnitudes until they settle.**
       formations, flee thresholds, and return schedules
 - [ ] Different seeds produce observably different runs
 - [ ] Flee and return do not perturb determinism
-- [ ] Confirm ~sdl.GetTicks()~ appears in no generation or threshold decision
-  - The threshold draw must stay free of wall-clock reads. This check can be
-    made partway, once the draw exists, rather than waiting on the crossing test
+- [x] Confirm ~sdl.GetTicks()~ appears in no generation or threshold decision
+  - The threshold draw is wall-clock free. The crossing test that will read it is
+    not written yet, so this covers generation only
 
 
 ** Verification is last by sequence, not by importance. Nothing in this slice is confirmed until it passes.
@@ -316,6 +340,12 @@ Blockers, not tasks. Each must be decided before the work that depends on it.
 
 ** Resolved since the last update
 
+- Threshold implementation scope — assign-and-display only, deliberately. The
+  crossing test was left to Wave Resolution rather than pulled forward, because
+  it needs a destroyed count and that runs straight into the ~enemy_indices~
+  recycling trap. Buying observability earlier would have meant either a
+  kill-count that silently breaks once bacteria return to recycled slots, or a
+  membership design decision inside a bookkeeping task.
 - Flee threshold direction — fraction *destroyed*, held as a per-mille ~int~.
   The ambiguity was the whole problem: read as fraction remaining, the old ~0.8~
   would mean "flee while 80% are still alive". ~WaveParams.threshold~ is to be
@@ -357,12 +387,16 @@ slice makes both harder to verify independently. See Decisions for the full rule
 
 Unrelated to the slice above; found while assessing current state.
 
-- [ ] ~parse_args~ in ~src/cli.odin~ declares return type ~CLI_State~ with no
-      terminating return on the fall-through path. Looks like a compile error, or
-      the file is not in the build.
+- [x] ~parse_args~ in ~src/cli.odin~ declared return type ~CLI_State~ with no
+      terminating return on the fall-through path
+  - It was a real compile error, and the file was in the build: ~core:fmt~ was
+    not imported, ~ERROR~ was unqualified, and the fall-through path had no
+    return. All three fixed. ~odin build src~ is now clean.
 - [ ] ~Config.seed~ and ~Config.level~ are never populated by ~parse_args~; only
       ~--debug~ is handled, and any other argument prints ~WRONG~ and errors out.
       A ~--seed~ flag would make Verification much easier to exercise.
+  - Still open, and now the only thing left in ~src/cli.odin~. No flag syntax
+    chosen yet
 
 ** Deferred
 

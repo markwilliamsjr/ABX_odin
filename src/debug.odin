@@ -22,7 +22,7 @@ Debug :: struct {
 	//
 	threshold_permille_texture: ^sdl.Texture,
 	prev_threshold_permille:    int,
-	threshhold_permille_rect:   sdl.Rect,
+	threshold_permille_rect:    sdl.Rect,
 	//
 	// fps debug info
 	//
@@ -147,18 +147,13 @@ debug_render :: proc(debug: ^Debug, assets: ^Assets, world: ^World, renderer: ^s
 			assets.debug_font,
 			threshold_permille_text,
 			&debug.threshold_permille_texture,
-			&debug.threshhold_permille_rect,
+			&debug.threshold_permille_rect,
 			15,
 			15 + debug.fps_rect.h + debug.game_state_rect.h + debug.wave_count_rect.h,
 		)
 		debug.prev_threshold_permille = world.level.wave[0].threshold_permille
 	}
-	sdl.RenderCopy(
-		renderer,
-		debug.threshold_permille_texture,
-		nil,
-		&debug.threshhold_permille_rect,
-	)
+	sdl.RenderCopy(renderer, debug.threshold_permille_texture, nil, &debug.threshold_permille_rect)
 }
 
 debug_update_text :: proc(
