@@ -3,6 +3,7 @@ package main
 import "base:runtime"
 import "core:container/pool"
 import "core:fmt"
+import "core:math"
 import "core:math/rand"
 import sdl "vendor:sdl2"
 
@@ -34,18 +35,19 @@ ENTRY_POINTS := [ENTRY_POINT_COUNT]sdl.FPoint {
 // ---- Types ----
 
 Wave :: struct {
-	level, total_enemies, spawn_count, species_unlocked, max_simult_divers:    int,
-	threshold, spawn_delay, spawn_timer, dive_delay, dive_timer, speed_scalar: f32,
-	path:                                                                      PathType,
-	enemy_indices:                                                             [MAX_ENEMIES]int,
-	is_active, formation_complete, threshold_crossed:                          bool,
-	formation_complete_time:                                                   u64,
-	control_points:                                                            [3]sdl.FPoint,
-	formation_positions:                                                       [MAX_REGIONS][MAX_ENEMIES]sdl.FPoint,
-	region_start:                                                              [MAX_REGIONS]sdl.FPoint,
-	region_enemy_count:                                                        [MAX_REGIONS]int,
-	spawn_region, spawn_index:                                                 int,
-	diver_selection_rule:                                                      DiverSelectionRule,
+	level, total_enemies, spawn_count, species_unlocked, max_simult_divers: int,
+	threshold_permille:                                                     int,
+	spawn_delay, spawn_timer, dive_delay, dive_timer, speed_scalar:         f32,
+	path:                                                                   PathType,
+	enemy_indices:                                                          [MAX_ENEMIES]int,
+	is_active, formation_complete, threshold_crossed:                       bool,
+	formation_complete_time:                                                u64,
+	control_points:                                                         [3]sdl.FPoint,
+	formation_positions:                                                    [MAX_REGIONS][MAX_ENEMIES]sdl.FPoint,
+	region_start:                                                           [MAX_REGIONS]sdl.FPoint,
+	region_enemy_count:                                                     [MAX_REGIONS]int,
+	spawn_region, spawn_index:                                              int,
+	diver_selection_rule:                                                   DiverSelectionRule,
 }
 
 Level :: struct {
@@ -57,11 +59,15 @@ Level :: struct {
 
 // ---- Init ----
 
-wave_init :: proc(wp: ^WaveParams, wave: ^Wave, wave_seed: u64) {
-	fmt.println("Wave Seed: ", wave_seed)
+wave_init :: proc(wp: ^WaveParams, wave: ^Wave, wave_seed: u64, level: int) {
+	wave.level = level
 
 	entry_rng_state := rand.create(derive_seed(wave_seed, .Entry, 0))
 	entry_rng := runtime.default_random_generator(&entry_rng_state)
+
+	threshold_rng_state := rand.create(derive_seed(wave_seed, .Level, 0))
+	threshold_rng := runtime.default_random_generator(&threshold_rng_state)
+	wave.threshold_permille = threshold_picker(level, threshold_rng)
 
 	region_size, region_count := compute_formation_bounds(wp)
 
@@ -108,7 +114,7 @@ level_init :: proc(bacteria: ^Bacteria, level: ^Level, master_seed: u64, level_n
 	wave_rng := runtime.default_random_generator(&wave_rng_state)
 	level.wave_count = wave_count_picker(level.level_number, wave_rng)
 
-	wave_init(&level_params, &level.wave[0], wave_seed)
+	wave_init(&level_params, &level.wave[0], wave_seed, level_number)
 }
 
 // ---- Update ----
@@ -218,4 +224,11 @@ wave_count_picker :: proc(level: int, wave_rng: runtime.Random_Generator) -> int
 		return rand.int_range(min, MAX_WAVES, wave_rng)
 	}
 	return rand.int_range(min, max, wave_rng)
+}
+
+threshold_picker :: proc(level: int, wave_rng: runtime.Random_Generator) -> int {
+	t := clamp(f32(level - 1) / 20, 0, 1)
+	base := 500 + 225 * (1 + math.cos(math.PI * t))
+	spread := f32(rand.int_range(-50, 50, wave_rng))
+	return int(clamp(base + spread, 500, 950))
 }

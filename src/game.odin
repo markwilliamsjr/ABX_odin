@@ -102,7 +102,6 @@ initialize_sdl :: proc(g: ^Game) -> bool {
 game_init :: proc(game: ^Game) {
 	now := time.now()
 	game.master_seed = u64(time.time_to_unix_nano(now))
-	fmt.println("Master Seed: ", game.master_seed)
 	assets_init(&game.assets, game.renderer)
 	world_init(&game.world, game.master_seed)
 	debug_init(&game.debug)

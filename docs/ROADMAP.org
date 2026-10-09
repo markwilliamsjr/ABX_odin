@@ -18,22 +18,124 @@ prerequisite for Level and Wave Lifecycle — the first category that produces
 visible behavior.
 
 - [x] Add ~.Level~ to ~SeedCategory~
-- [ ] Chain wave seeds from a per-level seed rather than from the run seed
+- [x] Chain wave seeds from a per-level seed rather than from the run seed
       directly (replaces the hardcoded ~0~ in ~level_init~)
   - ~level_seed = derive_seed(run_seed, .Level, level_number)~
   - ~wave_seed = derive_seed(level_seed, .Wave, wave_index)~
   - Uniqueness invariant is per ~(parent, category, number)~ triple, not a global
     wave counter. See Decisions for why the global counter was rejected.
-- [ ] Seed the per-level wave-count draw from ~derive_seed(level_seed, .Level, 0)~
-- [ ] Seed the per-wave flee threshold from ~derive_seed(wave_seed, .Level, 0)~,
-      not from a level seed number
-- [ ] Seed the per-wave flee threshold from the ~.Level~ category
+  - ~level_init~ now takes ~(master_seed, level_number)~ and owns the whole
+    chain; ~world_init~ passes the run seed through and no longer names a seed
+    category itself
+- [x] Seed the per-level wave-count draw from ~derive_seed(level_seed, .Level, 0)~
+  - Each draw site constructs its own throwaway RNG, so any draw is recomputable
+    from its triple alone with no shared generator
+- [ ] Seed and assign the per-wave flee threshold from
+      ~derive_seed(wave_seed, .Level, 0)~, not from a level seed number
+  - ~Wave.threshold~ is never assigned by ~wave_init~ today, so this is an
+    assign-and-seed task, not only a seeding task
+  - Design settled, not yet implemented. See Threshold design below.
+  - Scope is assign-and-display only. Nothing reads the threshold yet; the
+    crossing test and the membership problem belong to Wave Resolution
 - [ ] Verify no seed collision across levels
+  - Blocked until ~level_init~ initializes every drawn wave; only wave 0 exists
+    and only level 1 is ever passed
 
 ** Verifiable without playing the game — log the derived seeds and confirm
-different levels and waves produce different numbers. Note that ~level_init~
-currently passes a hardcoded ~0~, so wave 1 of level 5 and wave 1 of level 9
-receive identical seeds. This category fixes a real latent determinism bug.**
+different levels and waves produce different numbers. The hardcoded ~0~ is gone:
+~level_seed~ now varies with the level number, so wave seeds differ across
+levels. The fix is not yet observable, because ~world_init~ passes a literal ~1~
+and ~level_init~ initializes only ~wave[0]~.**
+
+** Seed assignments as they stand (~src/level.odin:101-112~, ~:63~)
+
+#+begin_example
+master_seed
+  └─ .Level, level_number → level_seed        (level_init)
+       ├─ .Wave, 0        → wave_seed         (level_init)
+       │    ├─ .Entry, 0 → entry points      (wave_init)
+       │    └─ .Level, 0 → flee threshold    (wave_init, pending)
+       └─ .Level, 0       → wave-count draw   (level_init)
+#+end_example
+
+Six distinct ~(parent, category, number)~ triples, no reuse. Three of them reuse
+the ~.Level~ category with a small number below the root derivation, which the
+Decision sanctions.
+
+** Threshold design (settled, not yet implemented)
+
+The flee threshold is a per-wave seeded draw from ~derive_seed(wave_seed, .Level, 0)~
+— one independent draw per wave, so waves within a level differ from each other
+rather than sharing a level-wide value.
+
+- **Direction** — fraction *destroyed*. The crossing test is
+  ~destroyed * 1000 >= spawn_count * threshold_permille~, all integer: no
+  division, no float compare, no boundary rounding.
+- **Representation** — per-mille ~int~, not ~f32~. Read as fraction remaining the
+  old ~0.8~ would have meant "flee while 80% alive", inverting the difficulty.
+  Per-mille also makes the value diffable in logs, which is how the seeding work
+  gets verified.
+- **Curve** — a half cycle of a raised cosine, crest to trough:
+  ~t = clamp((level-1)/20, 0, 1)~, ~base = 500 + 225 * (1 + cos(pi*t))~.
+  Flat at both ends, steepest mid-curve.
+- **Per-wave spread** — ~±50~ around the base, clamped to ~[500, 990]~. Keeps
+  waves within a level distinct without making variance a second difficulty knob.
+
+** Deliberately provisional: the 500 floor and the /20 span were picked for shape,
+not for balance, and are expected to be tuned in play.**
+
+| level | base | enemies (~3 + level*2~) | kills to cross | flee |
+|-------+------+-------------------------+-----------------+------|
+|     1 |  950 |                        5 |               5 | no  |
+|     2 |  947 |                        7 |               7 | no  |
+|     3 |  939 |                        9 |               9 | no  |
+|     4 |  925 |                       11 |              11 | no  |
+|     5 |  907 |                       13 |              12 | 1    |
+|    10 |  785 |                       23 |              19 | 4    |
+|    15 |  593 |                       33 |              20 | 13   |
+|    20 |  503 |                       43 |              22 | 21   |
+|   21+ |  500 |                       45+|               — | ~half|
+
+Nothing flees through level 4; one flees at level 5. The ±50 spread is what makes
+that "possibly" one — at level 5 the band is 857–957, crossing at either 12 or 13
+kills.
+
+** Two consequences to watch in play, both from threshold descending while wave
+size grows:
+
+- The tail is severe. By level 15 a wave resolves with 13 of 33 still standing.
+  Escalation past that point comes mostly from the roster, not from the fights.
+- Absolute kills-to-cross barely rises after level 10 (19 at 10, 22 at 20),
+  because the threshold falls about as fast as enemy count grows. Each level does
+  not demand strictly more kills than the last.
+- The roster fills faster, and the roster bound drops the *oldest* entry — so the
+  cap discards precisely the most-escaped, most-buffed bacteria. Worth revisiting
+  when the roster lands; it is not tunable away.
+
+** Index bases: level number is 1-based, wave index is 0-based. Level numbers are
+player-facing and match ~level_to_params~, which is written 1-based throughout
+(~src/procedural.odin:120-121~). Wave indices are internal array offsets and match
+~level.wave[i]~ directly. Mixing these is how a level silently wraps to the wrong
+block.**
+
+** Wave count is ~wave_count_picker~ (~src/level.odin:210-221~):
+~min = 1 + block*2~, ~max = min + 3~, both clamped to ~MAX_WAVES~, drawn with
+~rand.int_range~ (inclusive). Blocks are 5 levels, matching ~level_to_params~.
+
+| block | levels | range  |
+|-------+--------+--------|
+|     0 |    1–5 |    1–4 |
+|     1 |   6–10 |    3–6 |
+|     2 |  11–15 |    5–8 |
+|     3 |  16–20 |    7–10 |
+|     4 |  21–25 |   9–10 |
+|    5+ |    26+ |      10 |
+
+Floor is 1 at block 0, deliberately — a level may be a single wave. Adjacent
+blocks overlap by two values, so escalation is non-decreasing rather than strictly
+increasing. The range is pinned at ~MAX_WAVES~ from block 4: the draw still
+consumes its seed triple but always returns 10. ~MAX_WAVES~ was left at 10 to be
+judged in play; raising it widens the saturated tail.**
 
 *** Prerequisite: State and Input
 
@@ -56,15 +158,28 @@ than a cleanup. Recorded here so it does not read as an oversight.**
 *** Level and Wave Lifecycle
 
 - [ ] Add ~wave_index~ to ~Level~ (position within current level), keeping
-      ~wave_count~ as the global total; initialize both
-- [ ] Draw a level's wave count by seeded random draw, range growing with level,
+      ~wave_count~ as the level's own total; initialize both
+  - ~wave_count~ was described as "the global total" before the per-level draw
+    existed; it is now the current level's wave count
+- [x] Draw a level's wave count by seeded random draw, range growing with level,
       clamped to ~MAX_WAVES~
+  - ~wave_count_picker~ — see the formula under Prerequisite: Seeding
 - [ ] Initialize all drawn waves in ~level_init~
-- [ ] Thread ~level_to_params(level)~ through, replacing the hardcoded ~1~
+  - ~wave_init~ still takes one ~WaveParams~ from ~level_to_params~, so every
+    wave in a level would be a seeded variant of the same params: same enemy
+    count, same formation, same speed. Whether ~total_enemies~ varies per wave
+    is a design call belonging to this item
+- [x] Thread ~level_to_params(level)~ through, replacing the hardcoded ~1~
 - [ ] Advance ~wave_index~ when the active wave resolves
 - [ ] Mark the level complete when ~wave_index~ exceeds the level's wave count
-- [ ] Fix the debug overlay, which currently renders ~wave_count~ as a permanent
-      ~0~ because the field is never written
+- [x] Fix the debug overlay, which rendered ~wave_count~ as a permanent ~0~
+      because the field was never written
+- [ ] Show ~wave_index~ in the overlay once ~Level~ has the field
+- [ ] Show ~threshold_permille~ in the overlay
+  - Lands with the threshold seeding item. This is the "generate twice, compare"
+    check made visible, and the only way to observe the draw before Wave
+    Resolution reads it. Only ~wave[0]~ is initialized today, so the line reads
+    from ~wave[0]~
 
 *** Wave Resolution
 
@@ -72,6 +187,12 @@ The actual core of the slice. Nothing currently detects that a wave has
 finished.
 
 - [ ] Add a flee threshold to ~Wave~, rolled once at ~wave_init~
+  - The roll and the assignment land first, under Prerequisite: Seeding; what
+    remains here is the comparison that consumes it
+- [ ] Add the integer crossing test ~destroyed * 1000 >= spawn_count *
+      threshold_permille~, setting ~threshold_crossed~
+  - ~threshold_crossed~ already exists on ~Wave~ and is unused, so the flag has a
+    home
 - [ ] Track per-wave resolved count, incrementing on death or flee
 - [ ] Complete the wave when resolved == ~spawn_count~ (not ~total_enemies~ —
       spawning may not be finished)
@@ -86,8 +207,11 @@ finished.
 
 The difficulty-escalation engine, not an escape valve.
 
-- [ ] Flee remaining bacteria when remaining-alive drops below the rolled
+- [ ] Flee remaining bacteria when the fraction *destroyed* reaches the rolled
       threshold; resolve the wave at that moment
+  - The threshold is a per-mille fraction destroyed, not a fraction remaining —
+    see Threshold design. At level 15 a wave resolves with roughly 13 of 33
+    bacteria still standing, so "remaining" is the larger number here
 - [ ] On flee, move bacteria into a pending roster on ~World~, not ~Level~
       - The roster survives level transitions; ~Level_Transition~ must not clear it
 - [ ] Queue each fleeing bacterium for the *next wave*, positionally — flee again
@@ -165,6 +289,8 @@ magnitudes until they settle.**
 - [ ] Different seeds produce observably different runs
 - [ ] Flee and return do not perturb determinism
 - [ ] Confirm ~sdl.GetTicks()~ appears in no generation or threshold decision
+  - The threshold draw must stay free of wall-clock reads. This check can be
+    made partway, once the draw exists, rather than waiting on the crossing test
 
 
 ** Verification is last by sequence, not by importance. Nothing in this slice is confirmed until it passes.
@@ -173,12 +299,6 @@ magnitudes until they settle.**
 
 Blockers, not tasks. Each must be decided before the work that depends on it.
 
-- [ ] **Flee threshold direction** — ~WaveParams.threshold = 0.8~
-      (~src/procedural.odin:127~) is ambiguous between fraction destroyed and
-      fraction remaining. Read as fraction remaining, 0.8 means bacteria flee
-      while 80% are still alive, inverting the difficulty.
-      *Blocks Wave Resolution — the only open question that blocks
-      implementation.*
 - [ ] **Does the flee threshold scale with buff count?** A carried bacterium
       returns at full health with up to 5 buffs. If it can flee the instant the
       threshold crosses, a heavily buffed bacterium barely participates and the
@@ -195,6 +315,16 @@ Blockers, not tasks. Each must be decided before the work that depends on it.
       channel. Not needed before the skill tree.
 
 ** Resolved since the last update
+
+- Flee threshold direction — fraction *destroyed*, held as a per-mille ~int~.
+  The ambiguity was the whole problem: read as fraction remaining, the old ~0.8~
+  would mean "flee while 80% are still alive". ~WaveParams.threshold~ is to be
+  removed, so the seed becomes the only source. See Threshold design under
+  Prerequisite: Seeding.
+- Threshold curve — half cycle of a raised cosine over 20 levels, per-wave ±50
+  spread, drawn independently per wave. Chosen so nothing flees through level 4
+  and one flees at level 5. The floor and span are provisional, to be tuned by
+  feel in play.
 
 - Strengthening model — resistance buffs, not promotion. Bacteria never change
   species.

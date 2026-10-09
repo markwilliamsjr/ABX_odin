@@ -8,24 +8,39 @@ import ttf "vendor:sdl2/ttf"
 // ---- TYPES ----
 
 Debug :: struct {
-	debug_enabled:      bool,
-	show_stats:         bool,
-	show_entities:      bool,
-	show_player:        bool,
-	fps:                f32,
-	frame_time:         f32,
-	fps_timer:          f32,
-	fps_frames:         int,
-	frame_count:        u64,
-	fps_texture:        ^sdl.Texture,
-	prev_fps:           f32,
-	fps_rect:           sdl.Rect,
-	game_state_texture: ^sdl.Texture,
-	prev_game_state:    GameState,
-	game_state_rect:    sdl.Rect,
-	wave_count_texture: ^sdl.Texture,
-	prev_wave_count:    int,
-	wave_count_rect:    sdl.Rect,
+	debug_enabled:              bool,
+	show_stats:                 bool,
+	show_entities:              bool,
+	show_player:                bool,
+	fps:                        f32,
+	frame_time:                 f32,
+	fps_timer:                  f32,
+	fps_frames:                 int,
+	frame_count:                u64,
+	//
+	//threshold permille debug info
+	//
+	threshold_permille_texture: ^sdl.Texture,
+	prev_threshold_permille:    int,
+	threshhold_permille_rect:   sdl.Rect,
+	//
+	// fps debug info
+	//
+	fps_texture:                ^sdl.Texture,
+	prev_fps:                   f32,
+	fps_rect:                   sdl.Rect,
+	//
+	// game state debug info
+	//
+	game_state_texture:         ^sdl.Texture,
+	prev_game_state:            GameState,
+	game_state_rect:            sdl.Rect,
+	//
+	// wave debug info
+	//
+	wave_count_texture:         ^sdl.Texture,
+	prev_wave_count:            int,
+	wave_count_rect:            sdl.Rect,
 }
 
 // ---- INIT ----
@@ -77,6 +92,7 @@ debug_render :: proc(debug: ^Debug, assets: ^Assets, world: ^World, renderer: ^s
 	}
 	sdl.RenderCopy(renderer, debug.fps_texture, nil, &debug.fps_rect)
 
+	// Draw game state
 	if debug.prev_game_state != world.state || debug.game_state_texture == nil {
 		game_state_text := strings.clone_to_cstring(
 			fmt.aprintf("State: %v", world.state, allocator = context.temp_allocator),
@@ -94,6 +110,7 @@ debug_render :: proc(debug: ^Debug, assets: ^Assets, world: ^World, renderer: ^s
 	}
 	sdl.RenderCopy(renderer, debug.game_state_texture, nil, &debug.game_state_rect)
 
+	// draw wave count
 	if debug.prev_wave_count != world.level.wave_count || debug.wave_count_texture == nil {
 		wave_count_text := strings.clone_to_cstring(
 			fmt.aprintf(
@@ -114,6 +131,34 @@ debug_render :: proc(debug: ^Debug, assets: ^Assets, world: ^World, renderer: ^s
 		debug.prev_wave_count = world.level.wave_count
 	}
 	sdl.RenderCopy(renderer, debug.wave_count_texture, nil, &debug.wave_count_rect)
+
+	// Draw Threshold
+	if debug.prev_threshold_permille != world.level.wave[0].threshold_permille ||
+	   debug.threshold_permille_texture == nil {
+		threshold_permille_text := strings.clone_to_cstring(
+			fmt.aprintf(
+				"Threshold: %d",
+				world.level.wave[0].threshold_permille,
+				allocator = context.temp_allocator,
+			),
+		)
+		debug_update_text(
+			renderer,
+			assets.debug_font,
+			threshold_permille_text,
+			&debug.threshold_permille_texture,
+			&debug.threshhold_permille_rect,
+			15,
+			15 + debug.fps_rect.h + debug.game_state_rect.h + debug.wave_count_rect.h,
+		)
+		debug.prev_threshold_permille = world.level.wave[0].threshold_permille
+	}
+	sdl.RenderCopy(
+		renderer,
+		debug.threshold_permille_texture,
+		nil,
+		&debug.threshhold_permille_rect,
+	)
 }
 
 debug_update_text :: proc(

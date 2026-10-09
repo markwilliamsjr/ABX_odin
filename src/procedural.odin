@@ -59,7 +59,7 @@ EntryPathData :: struct {
 
 WaveParams :: struct {
 	total_enemies, max_simult_divers, species_unlocked, level: int,
-	speed_scalar, spawn_delay, dive_delay, threshold:          f32,
+	speed_scalar, spawn_delay, dive_delay:                     f32,
 	path_type:                                                 PathType,
 	formation_params:                                          FormationParams,
 	diver_selection_rule:                                      DiverSelectionRule,
@@ -125,7 +125,6 @@ level_to_params :: proc(level: int) -> WaveParams {
 		species_unlocked = (level - 1) / 5 + 1,
 		max_simult_divers = 1,
 		spawn_delay = 0.3,
-		threshold = 0.8,
 		path_type = .Line_Ish,
 		formation_params = LineParams{max_per_row = -1, row_spacing_fraction = 1.0},
 		diver_selection_rule = .First_Found,
