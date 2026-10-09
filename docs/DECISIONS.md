@@ -269,44 +269,68 @@ simplicity and for greater variance in resulting stacks.
 - **What visual channel do buffs use?** One outline per category is the current
   leaning, held loosely. Does not need resolving before the skill tree.
 
-Return scope is settled — see the "Return scope" section above.
+## Bacteria identity and behavior
 
-## Determinism
+### Decision
 
-Bacteria identity and behavior
-
-Decision
-
-Separate species identity from reusable gameplay behavior. A species defines what a bacterium is; its behavior configuration defines what it does. Behaviors should be composed from reusable categories rather than implemented as a separate bespoke behavior for every species.
+Separate species identity from reusable gameplay behavior. A species defines
+what a bacterium is; its behavior configuration defines what it does. Behaviors
+should be composed from reusable categories rather than implemented as a separate
+bespoke behavior for every species.
 
 The initial categories are:
 
-* Movement — e.g. straight, sine, zigzag, scatter, sweep
-* Attack — e.g. basic, charge, ranged, spawn
-* Defense — e.g. normal, armored, resistant
-* Group — e.g. none, swarm, protect
-* Lifecycle — e.g. normal, split, spore, reposition
+- Movement — e.g. straight, sine, zigzag, scatter, sweep
+- Attack — e.g. basic, charge, ranged, spawn
+- Defense — e.g. normal, armored, resistant
+- Group — e.g. none, swarm, protect
+- Lifecycle — e.g. normal, split, spore, reposition
 
-These are design categories, not a commitment to implement every example. Start by refactoring the existing four species to use the model before adding more species or expanding the behavior set.
+These are design categories, not a commitment to implement every example. Start
+by refactoring the existing four species to use the model before adding more
+species or expanding the behavior set.
 
-Reason
+### Reason
 
-Species-specific behavior branching does not scale well as the roster grows. With 10–15 species, putting each species’ unique rules into multiple switches would spread species knowledge throughout the code and make combinations hard to reason about.
+Species-specific behavior branching does not scale well as the roster grows.
+With 10–15 species, putting each species' unique rules into multiple switches
+would spread species knowledge throughout the code and make combinations hard to
+reason about.
 
-Separating identity from behavior allows species to share capabilities and makes encounter composition more expressive: procedural generation can eventually choose species, formations, entry patterns, and compatible behavior combinations without requiring every combination to have its own implementation.
+Separating identity from behavior allows species to share capabilities and makes
+encounter composition more expressive: procedural generation can eventually
+choose species, formations, entry patterns, and compatible behavior combinations
+without requiring every combination to have its own implementation.
 
-This also preserves the decision that bacteria never change species. A returning bacterium keeps its species identity and instance-specific resistance buffs; those are separate from its reusable behavior configuration.
+This also preserves the decision that bacteria never change species. A returning
+bacterium keeps its species identity and instance-specific resistance buffs;
+those are separate from its reusable behavior configuration.
 
-Consequences
+### Consequences
 
-* Keep species definitions as the source of species identity and base properties; do not make each species synonymous with one bespoke movement implementation.
-* Implement behavior categories as reusable building blocks, and compose species from the behaviors they need. Avoid adding categories without a concrete gameplay use.
-* Refactor the existing Strep, Staph, E. coli, and Pseudomonas behaviors first. Use those species to validate the architecture before adding more bacteria.
-* Keep per-instance state (health, current behavior state, wave membership, and buffs) separate from species definitions and reusable behavior configuration.
-* The behavior architecture is deferred until the current level/wave lifecycle slice is complete and verified. Do not interrupt the current slice to redesign the enemy system.
-* Once the architecture is established, new species can be added by composing existing behaviors where possible; genuinely new behavior should be introduced only when it creates a distinct gameplay role.
-* Behavior and procedural composition must preserve seeded determinism. Any random choices that affect generated behavior must use the project’s seed derivation rules, not wall-clock time.
-* Adaptive wave composition remains separate deferred work. Choosing encounters based on what the player is not killing still requires a kill-count system.
+- Keep species definitions as the source of species identity and base properties.
+  Do not make each species synonymous with one bespoke movement implementation.
+- Implement behavior categories as reusable building blocks, and compose species
+  from the behaviors they need. Avoid adding categories without a concrete
+  gameplay use.
+- Refactor the existing Strep, Staph, E. coli, and Pseudomonas behaviors first.
+  Use those species to validate the architecture before adding more bacteria.
+- Keep per-instance state (health, current behavior state, wave membership, and
+  buffs) separate from species definitions and reusable behavior configuration.
+- The behavior architecture is deferred until the current level/wave lifecycle
+  slice is complete and verified. Do not interrupt the current slice to redesign
+  the enemy system.
+- Once the architecture is established, new species can be added by composing
+  existing behaviors where possible; genuinely new behavior should be introduced
+  only when it creates a distinct gameplay role.
+- Behavior and procedural composition must preserve seeded determinism. Any
+  random choices that affect generated behavior must use the project's seed
+  derivation rules, not wall-clock time.
+- Adaptive wave composition remains separate deferred work, as recorded in
+  "Fleeing and returning". Choosing encounters based on what the player is not
+  killing still requires a kill-count system.
+
+## Determinism
 
 ### Decision
 
