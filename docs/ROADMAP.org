@@ -238,6 +238,21 @@ Unrelated to the slice above; found while assessing current state.
 
 Deliberately out of scope. Not to be started until the current slice lands.
 
+*** Enemy Behavior Architecture
+
+The goal is to separate bacteria identity from reusable gameplay behaviors.
+
+Species define what a bacterium is; behavior traits define what it does.
+
+- [ ] Define reusable movement behaviors
+- [ ] Define reusable attack behaviors
+- [ ] Define reusable defensive traits
+- [ ] Define reusable group behaviors
+- [ ] Define reusable lifecycle behaviors
+- [ ] Refactor existing bacteria to compose these behaviors
+- [ ] Add new bacteria using combinations of existing behaviors
+- [ ] Verify behavior composition preserves seeded determinis
+
 *** Skill Tree
 
 - [ ] Node graph, persistence across levels, UI, stat application
