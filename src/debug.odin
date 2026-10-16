@@ -79,7 +79,7 @@ debug_render :: proc(debug: ^Debug, assets: ^Assets, world: ^World, renderer: ^s
 		fps_text := strings.clone_to_cstring(
 			fmt.aprintf("FPS: %.1f", debug.fps, allocator = context.temp_allocator),
 		)
-		debug_update_text(
+		update_text(
 			renderer,
 			assets.debug_font,
 			fps_text,
@@ -97,7 +97,7 @@ debug_render :: proc(debug: ^Debug, assets: ^Assets, world: ^World, renderer: ^s
 		game_state_text := strings.clone_to_cstring(
 			fmt.aprintf("State: %v", world.state, allocator = context.temp_allocator),
 		)
-		debug_update_text(
+		update_text(
 			renderer,
 			assets.debug_font,
 			game_state_text,
@@ -119,7 +119,7 @@ debug_render :: proc(debug: ^Debug, assets: ^Assets, world: ^World, renderer: ^s
 				allocator = context.temp_allocator,
 			),
 		)
-		debug_update_text(
+		update_text(
 			renderer,
 			assets.debug_font,
 			wave_count_text,
@@ -142,7 +142,7 @@ debug_render :: proc(debug: ^Debug, assets: ^Assets, world: ^World, renderer: ^s
 				allocator = context.temp_allocator,
 			),
 		)
-		debug_update_text(
+		update_text(
 			renderer,
 			assets.debug_font,
 			threshold_permille_text,
@@ -154,29 +154,4 @@ debug_render :: proc(debug: ^Debug, assets: ^Assets, world: ^World, renderer: ^s
 		debug.prev_threshold_permille = world.level.wave[0].threshold_permille
 	}
 	sdl.RenderCopy(renderer, debug.threshold_permille_texture, nil, &debug.threshold_permille_rect)
-}
-
-debug_update_text :: proc(
-	renderer: ^sdl.Renderer,
-	font: ^ttf.Font,
-	text: cstring,
-	texture: ^^sdl.Texture,
-	rect: ^sdl.Rect,
-	x, y: i32,
-) {
-	surface := ttf.RenderText_Blended(font, text, {255, 255, 255, 220})
-	defer sdl.FreeSurface(surface)
-	sdl.DestroyTexture(texture^)
-	texture^ = sdl.CreateTextureFromSurface(renderer, surface)
-
-	text_w: i32
-	text_h: i32
-	sdl.QueryTexture(texture^, nil, nil, &text_w, &text_h)
-
-	rect^ = sdl.Rect {
-		x = x,
-		y = y,
-		w = text_w,
-		h = text_h,
-	}
 }

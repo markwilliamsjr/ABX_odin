@@ -142,6 +142,23 @@ assets_init :: proc(asset: ^Assets, renderer: ^sdl.Renderer) {
 
 // ---- Update ----
 
+world_update :: proc(game: ^Game, keystate: [^]u8, delta_time: f32) {
+	switch game.world.state {
+	case .Menu:
+	case .Playing:
+		player_update(&game.world.player, keystate, delta_time)
+		player_fire_bullet(&game.world.player, &game.world.bullets, keystate)
+		bullet_update(&game.world.bullets, delta_time)
+		bacteria_update(&game.world.bacteria, delta_time, game.world.player.x)
+		collision_update(&game.world.bullets, &game.world.bacteria)
+		wave_update(&game.world.level.wave[0], &game.world.bacteria, delta_time)
+		wave_dive_update(&game.world.level.wave[0], &game.world.bacteria, delta_time)
+	case .Level_Transition:
+	case .Paused:
+	case .Game_Over:
+	}
+}
+
 game_handle_events :: proc(game: ^Game, event: ^sdl.Event, running: ^bool) {
 	for (sdl.PollEvent(event)) {
 		#partial switch event.type {
@@ -154,6 +171,18 @@ game_handle_events :: proc(game: ^Game, event: ^sdl.Event, running: ^bool) {
 		case .KEYDOWN:
 			#partial switch event.key.keysym.sym {
 			case .ESCAPE:
+				#partial switch game.world.state {
+				case .Playing:
+					game.world.state = .Paused
+				case .Paused:
+					game.world.state = .Playing
+				}
+			case .RETURN:
+				#partial switch game.world.state {
+				case .Menu:
+					game.world.state = .Playing
+				}
+			case .K:
 				running^ = false
 			case .F3:
 				game.debug.debug_enabled = !game.debug.debug_enabled
@@ -212,6 +241,31 @@ image_texture_load :: proc(renderer: ^sdl.Renderer, path: string) -> ^sdl.Textur
 		return nil
 	}
 	return texture
+}
+
+update_text :: proc(
+	renderer: ^sdl.Renderer,
+	font: ^ttf.Font,
+	text: cstring,
+	texture: ^^sdl.Texture,
+	rect: ^sdl.Rect,
+	x, y: i32,
+) {
+	surface := ttf.RenderText_Blended(font, text, {255, 255, 255, 220})
+	defer sdl.FreeSurface(surface)
+	sdl.DestroyTexture(texture^)
+	texture^ = sdl.CreateTextureFromSurface(renderer, surface)
+
+	text_w: i32
+	text_h: i32
+	sdl.QueryTexture(texture^, nil, nil, &text_w, &text_h)
+
+	rect^ = sdl.Rect {
+		x = x,
+		y = y,
+		w = text_w,
+		h = text_h,
+	}
 }
 
 // ---- Math ----
@@ -437,14 +491,7 @@ main :: proc() {
 		debug_update(&game.debug, delta_time)
 
 		// GAME UPDATES
-		player_update(&game.world.player, keystate, delta_time)
-		player_fire_bullet(&game.world.player, &game.world.bullets, keystate)
-		bullet_update(&game.world.bullets, delta_time)
-		bacteria_update(&game.world.bacteria, delta_time, game.world.player.x)
-		collision_update(&game.world.bullets, &game.world.bacteria)
-		wave_update(&game.world.level.wave[0], &game.world.bacteria, delta_time)
-		wave_dive_update(&game.world.level.wave[0], &game.world.bacteria, delta_time)
-
+		world_update(&game, keystate, delta_time)
 		// RENDER
 		render_world(&game.world, &game.assets, game.renderer)
 		debug_render(&game.debug, &game.assets, &game.world, game.renderer)
