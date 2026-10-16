@@ -359,6 +359,20 @@ calculate_bullet_damage :: proc(
 
 // ---- Render ----
 
+render_state :: proc(game: ^Game, renderer: ^sdl.Renderer) {
+	switch game.world.state {
+	case .Menu:
+	case .Playing:
+		render_world(&game.world, &game.assets, renderer)
+	case .Level_Transition:
+		render_world(&game.world, &game.assets, renderer)
+	case .Paused:
+		render_world(&game.world, &game.assets, renderer)
+	case .Game_Over:
+		render_world(&game.world, &game.assets, renderer)
+	}
+}
+
 render_world :: proc(world: ^World, assets: ^Assets, renderer: ^sdl.Renderer) {
 	sdl.SetRenderDrawColor(renderer, 0, 0, 0, 255)
 	sdl.RenderClear(renderer)
@@ -366,6 +380,19 @@ render_world :: proc(world: ^World, assets: ^Assets, renderer: ^sdl.Renderer) {
 	render_player(world, assets, renderer)
 	render_bullets(world, assets, renderer)
 	render_bacteria(world, assets, renderer)
+}
+
+render_menu :: proc(game: ^Game, renderer: ^sdl.Renderer) {
+	sdl.SetRenderDrawColor(renderer, 0, 0, 0, 255)
+	sdl.RenderClear(renderer)
+
+	title_texture: ^sdl.Texture
+	title_rect: sdl.Rect
+	title: cstring = "ABX!"
+	update_text(renderer, game.assets.debug_font, title, &title_texture, &title_rect, 0, 0)
+	title_rect.x = (SCREEN_WIDTH - title_rect.w) / 2
+	sdl.RenderCopy(renderer, title_texture, nil, &title_rect)
+
 }
 
 render_player :: proc(world: ^World, assets: ^Assets, renderer: ^sdl.Renderer) {
@@ -493,7 +520,7 @@ main :: proc() {
 		// GAME UPDATES
 		world_update(&game, keystate, delta_time)
 		// RENDER
-		render_world(&game.world, &game.assets, game.renderer)
+		render_state(&game, game.renderer)
 		debug_render(&game.debug, &game.assets, &game.world, game.renderer)
 		sdl.RenderPresent(game.renderer)
 	}
