@@ -30,21 +30,21 @@ MAX_REGIONS :: 10
 // ---- Types ----
 
 Game :: struct {
-	window:      ^sdl.Window,
-	renderer:    ^sdl.Renderer,
-	assets:      Assets,
-	world:       World,
-	debug:       Debug,
-	config:      Config,
-	master_seed: u64,
+	window:   ^sdl.Window,
+	renderer: ^sdl.Renderer,
+	assets:   Assets,
+	world:    World,
+	debug:    Debug,
+	config:   Config,
 }
 
 World :: struct {
-	player:   Player,
-	bullets:  Bullets,
-	bacteria: Bacteria,
-	level:    Level,
-	state:    GameState,
+	player:      Player,
+	bullets:     Bullets,
+	bacteria:    Bacteria,
+	level:       Level,
+	state:       GameState,
+	master_seed: u64,
 }
 
 Assets :: struct {
@@ -101,16 +101,16 @@ initialize_sdl :: proc(g: ^Game) -> bool {
 
 game_init :: proc(game: ^Game) {
 	now := time.now()
-	game.master_seed = u64(time.time_to_unix_nano(now))
+	game.world.master_seed = u64(time.time_to_unix_nano(now))
 	assets_init(&game.assets, game.renderer)
-	world_init(&game.world, game.master_seed)
+	world_init(&game.world)
 	debug_init(&game.debug)
 }
 
-world_init :: proc(world: ^World, master_seed: u64) {
+world_init :: proc(world: ^World) {
 	world.state = .Menu
 	world.player = player_init(SCREEN_WIDTH, SCREEN_HEIGHT)
-	level_init(&world.bacteria, &world.level, master_seed, 1)
+	level_init(&world.bacteria, &world.level, world.master_seed, 1)
 }
 
 assets_init :: proc(asset: ^Assets, renderer: ^sdl.Renderer) {
@@ -362,6 +362,7 @@ calculate_bullet_damage :: proc(
 render_state :: proc(game: ^Game, renderer: ^sdl.Renderer) {
 	switch game.world.state {
 	case .Menu:
+		render_menu(game, renderer)
 	case .Playing:
 		render_world(&game.world, &game.assets, renderer)
 	case .Level_Transition:
@@ -387,12 +388,20 @@ render_menu :: proc(game: ^Game, renderer: ^sdl.Renderer) {
 	sdl.RenderClear(renderer)
 
 	title_texture: ^sdl.Texture
+	defer sdl.DestroyTexture(title_texture)
 	title_rect: sdl.Rect
 	title: cstring = "ABX!"
-	update_text(renderer, game.assets.debug_font, title, &title_texture, &title_rect, 0, 0)
+	update_text(renderer, game.assets.debug_font, title, &title_texture, &title_rect, 0, 140)
 	title_rect.x = (SCREEN_WIDTH - title_rect.w) / 2
 	sdl.RenderCopy(renderer, title_texture, nil, &title_rect)
 
+	helper_texture: ^sdl.Texture
+	defer sdl.DestroyTexture(helper_texture)
+	helper_rect: sdl.Rect
+	helper: cstring = "Press 'ENTER' to start"
+	update_text(renderer, game.assets.debug_font, helper, &helper_texture, &helper_rect, 0, 280)
+	helper_rect.x = (SCREEN_WIDTH - helper_rect.w) / 2
+	sdl.RenderCopy(renderer, helper_texture, nil, &helper_rect)
 }
 
 render_player :: proc(world: ^World, assets: ^Assets, renderer: ^sdl.Renderer) {
