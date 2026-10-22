@@ -11,11 +11,11 @@ that established the work.
 
 Level advancement and transition, plus the minimum needed to observe it.
 
-*** Prerequisite: Seeding  ← START HERE
+*** Prerequisite: Seeding
 
-The only item with no dependencies and no open question blocking it, and a
-prerequisite for Level and Wave Lifecycle — the first category that produces
-visible behavior.
+Complete. Kept for the seed-assignment reference and the one unfinished check
+(collision verification, which needs every wave initialized). The next start
+point is Level and Wave Lifecycle.
 
 - [x] Add ~.Level~ to ~SeedCategory~
 - [x] Chain wave seeds from a per-level seed rather than from the run seed
@@ -32,7 +32,7 @@ visible behavior.
     from its triple alone with no shared generator
 - [x] Seed and assign the per-wave flee threshold from
       ~derive_seed(wave_seed, .Level, 0)~, not from a level seed number
-  - ~threshold_picker~ (~src/level.odin:230~), drawn inside ~wave_init~ from a
+  - ~threshold_picker~ (~src/level.odin:229~), drawn inside ~wave_init~ from a
     second throwaway state built off ~wave_seed~, so the whole result is
     recomputable from the triple alone
   - ~wave_init~ now takes ~level_number~ explicitly rather than reading it from
@@ -45,15 +45,17 @@ visible behavior.
     crossing test and the membership problem belong to Wave Resolution
 - [ ] Verify no seed collision across levels
   - Blocked until ~level_init~ initializes every drawn wave; only wave 0 exists
-    and only level 1 is ever passed
+  - The level half is now testable: ~--level~ reaches ~level_init~, so levels
+    generate different ~level_seed~ values. What is still missing is more than one
+    wave per level to compare
 
 ** Verifiable without playing the game — log the derived seeds and confirm
-different levels and waves produce different numbers. The hardcoded ~0~ is gone:
-~level_seed~ now varies with the level number, so wave seeds differ across
-levels. The fix is not yet observable, because ~world_init~ passes a literal ~1~
-and ~level_init~ initializes only ~wave[0]~.**
+different levels and waves produce different numbers. The hardcoded ~0~ is gone
+and the hardcoded level number is gone: ~--level~ now reaches ~level_init~, so
+wave seeds differ across levels. Only the per-wave half is still unobservable,
+because ~level_init~ initializes just ~wave[0]~.**
 
-** Seed assignments as they stand (~src/level.odin:101-112~, ~:63~)
+** Seed assignments as they stand (~src/level.odin:107-118~, ~:62~)
 
 #+begin_example
 master_seed
@@ -138,7 +140,7 @@ player-facing and match ~level_to_params~, which is written 1-based throughout
 ~level.wave[i]~ directly. Mixing these is how a level silently wraps to the wrong
 block.**
 
-** Wave count is ~wave_count_picker~ (~src/level.odin:210-221~):
+** Wave count is ~wave_count_picker~ (~src/level.odin:216-227~):
 ~min = 1 + block*2~, ~max = min + 3~, both clamped to ~MAX_WAVES~, drawn with
 ~rand.int_range~ (inclusive). Blocks are 5 levels, matching ~level_to_params~.
 
@@ -159,28 +161,45 @@ judged in play; raising it widens the saturated tail.**
 
 *** Prerequisite: State and Input
 
-- [ ] Gate per-frame updates in ~main~ on ~world.state~
-  - Each state gets its own update set
+Complete. Update and render are both gated on ~world.state~.
+
+- [x] Gate per-frame updates in ~main~ on ~world.state~
+  - Each state gets its own update set, in ~world_update~
   - ~.Menu~ renders only; ~.Playing~ runs simulation; ~.Level_Transition~ runs
-    transition logic; ~.Paused~ suspends simulation
-  - Extract ~update_simulation~ so per-state update sets stay visible in one
-    place rather than scattered through the loop
-- [ ] Add event handling to leave ~.Menu~ and enter ~.Playing~
-- [ ] Show a keybind hint on the menu so the entry action is discoverable
+    transition logic (still a no-op); ~.Paused~ suspends simulation
+  - Extracted as ~world_update~ rather than ~update_simulation~, matching the
+    existing ~*_update~ family
+- [x] Add event handling to leave ~.Menu~ and enter ~.Playing~
+  - Enter (~.RETURN~ only; numpad Enter is not handled)
+  - Esc toggles ~.Playing~ ↔ ~.Paused~ and does nothing elsewhere
+  - K quits, as a testing-only emergency key. Esc no longer quits
+- [x] Show a keybind hint on the menu so the entry action is discoverable
+  - Menu is text only: title, hint, clear. No world behind it
+- [x] Gate rendering on ~world.state~ as well
+  - ~render_state~ mirrors ~world_update~: a full switch over every state
+  - ~#partial switch~ was the original mistake here: it left ~.Paused~ drawing
+    nothing, which smears the back buffer rather than freezing the frame
+- [x] Start directly in ~.Playing~ when ~--debug~ is passed
+  - Skips the menu and enables the overlay. ~level_init~ keeps a single call
+    site in ~world_init~ as a result
 
 ** ~.Game_Over~ is deliberately left unreachable for now, and stays a dead enum
 value. It has no trigger: the player has no health field, nothing detects
-player-bacteria collision (~collision_update~, ~src/game.odin:166~, tests bullets
+player-bacteria collision (~collision_update~, ~src/game.odin:202~, tests bullets
 against bacteria only), and no damage is ever applied to the player. Making it
 reachable means inventing a death condition, which is a design decision rather
 than a cleanup. Recorded here so it does not read as an oversight.**
 
-*** Level and Wave Lifecycle
+*** Level and Wave Lifecycle  ← START HERE
 
-- [ ] Add ~wave_index~ to ~Level~ (position within current level), keeping
-      ~wave_count~ as the level's own total; initialize both
-  - ~wave_count~ was described as "the global total" before the per-level draw
-    existed; it is now the current level's wave count
+The next item is the one that makes the seed chain observable: initializing every
+drawn wave.
+
+- [x] Initialize ~wave_count~ in ~level_init~, keeping it as the level's own total
+  - It was described as "the global total" before the per-level draw existed; it
+    is now the current level's wave count
+- [ ] Add ~wave_index~ to ~Level~ (position within the current level)
+  - Wave index starts at 0. Level number is 1-based; do not mix the two
 - [x] Draw a level's wave count by seeded random draw, range growing with level,
       clamped to ~MAX_WAVES~
   - ~wave_count_picker~ — see the formula under Prerequisite: Seeding
@@ -280,8 +299,8 @@ Strengthening is by resistance only. Bacteria never change species.
         base health would silently rescale every buff
 - [ ] Roll the category from the full set on each return; repeats allowed
 - [ ] Restore health to spawn max on return, which may be buff-boosted
-- [ ] Wire ~species_unlocked~ (~src/procedural.odin:124~) into spawning, so
-      ~bacteria_spawn~ stops hardcoding ~.Strep~ (~src/level.odin:128~)
+- [ ] Wire ~species_unlocked~ (~src/procedural.odin:125~) into spawning, so
+      ~bacteria_spawn~ stops hardcoding ~.Strep~ (~src/level.odin:141~)
       - For spawn variety only; there is no promotion
 
 ** Note: base stats are still in progress and not final. Do not tune buff
@@ -372,13 +391,13 @@ Blockers, not tasks. Each must be decided before the work that depends on it.
 Tracked separately from the slice: mixing a timing refactor into an advancement
 slice makes both harder to verify independently. See Decisions for the full rule.
 
-- [ ] Split ~delta_time~ (~src/game.odin:431~) into real elapsed time for motion
+- [ ] Split ~delta_time~ (~src/game.odin:540~) into real elapsed time for motion
       and a fixed-increment tick counter for decisions
-- [ ] Convert ~formation_complete_time~ (~src/level.odin:146~) from
+- [ ] Convert ~formation_complete_time~ (~src/level.odin:159~) from
       ~sdl.GetTicks()~ to a tick count
-- [ ] Fix the always-true dive gate at ~src/level.odin:157~ — it never gated
+- [ ] Fix the always-true dive gate at ~src/level.odin:170~ — it never gated
       anything, leaving ~formation_complete_time~ dead
-- [ ] Make ~formation_complete~ (~src/level.odin:136-148~) tick-driven rather than
+- [ ] Make ~formation_complete~ (~src/level.odin:149-161~) tick-driven rather than
       derived from continuous motion; it is the one decision currently coupled to
       wall-clock timing
 - [ ] Audit for further wall-clock reads feeding decisions
@@ -392,11 +411,15 @@ Unrelated to the slice above; found while assessing current state.
   - It was a real compile error, and the file was in the build: ~core:fmt~ was
     not imported, ~ERROR~ was unqualified, and the fall-through path had no
     return. All three fixed. ~odin build src~ is now clean.
-- [ ] ~Config.seed~ and ~Config.level~ are never populated by ~parse_args~; only
-      ~--debug~ is handled, and any other argument prints ~WRONG~ and errors out.
-      A ~--seed~ flag would make Verification much easier to exercise.
-  - Still open, and now the only thing left in ~src/cli.odin~. No flag syntax
-    chosen yet
+- [x] ~Config.seed~ and ~Config.level~ were never populated by ~parse_args~; only
+      ~--debug~ was handled, and any other argument printed ~WRONG~ and errored
+      out
+  - ~--seed <n>~, ~--level <n>~, ~--no-vsync~, ~-h~ and ~--help~ are implemented.
+    ~--seed~ parses as ~u64~ so negatives are rejected; ~--level~ requires ~>= 1~,
+    because a level below 1 makes ~wave_count_picker~ compute a negative range
+  - ~parse_args~ now runs in ~main~ before ~initialize_sdl~, so help and errors
+    never open a window. ~.ERROR~ exits with ~os.exit(1)~ directly, because the
+    deferred cleanup is not registered on that path
 
 ** Deferred
 

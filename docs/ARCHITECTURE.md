@@ -28,6 +28,34 @@ A **wave** determines:
 
 Formation generation happens before spawning.
 
+## State and frame loop
+
+Every frame does two things: update, then render. Both are dispatched on
+`world.state`, through `world_update` and `render_state` respectively. The two
+switches mirror each other, so each state's behaviour is visible in one place per
+phase rather than scattered through the loop.
+
+| State | Update | Render |
+|---|---|---|
+| `.Menu` | nothing | menu only; no world behind it |
+| `.Playing` | full simulation | world |
+| `.Paused` | nothing | world, frozen |
+| `.Level_Transition` | transition logic (not yet implemented) | world or transition output |
+| `.Game_Over` | nothing; unreachable today | world |
+
+Both switches are exhaustive, not partial. Adding a `GameState` must fail the
+build until someone answers "what does this state update?" and "what does it
+render?". Partial switches default to doing nothing, and doing nothing in render
+means an uncleared back buffer, which smears the previous frame rather than
+freezing it.
+
+`.Paused` suspends simulation but keeps rendering. A paused game that stops
+drawing is not paused, it is broken.
+
+`--debug` starts directly in `.Playing` and enables the overlay, skipping the
+menu. The level is generated in both paths, so there is a single call site for
+initial level generation.
+
 ## Ending a wave
 
 A wave ends when every bacterium spawned in it is resolved. Resolution has

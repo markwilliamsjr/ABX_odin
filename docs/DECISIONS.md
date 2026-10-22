@@ -482,6 +482,10 @@ appears once.
   for per-level draws with small numbers. A second category would restore strict
   meaning but is not worth it at this call count.
 - Same seed in, same run out.
+- `master_seed` lives on `World`, not `Game`. The transition path and
+  `Level_Transition` both need to derive seeds and only see `World`. Selection —
+  fixed from `--seed` or clock-derived — still happens once, in `game_init`, and
+  must be written before `world_init` runs.
 
 ## Scope
 
@@ -503,7 +507,51 @@ main loop ignores `world.state` entirely, updating every system unconditionally.
 - "Minimal menu" means only enough to start the game: state gating, an entry
   action, and a visible hint. A full menu — options, quit confirmation, and so on
   — is separate work.
-- Every `GameState` variant should be reachable so none remains a dead enum value.
+- Every `GameState` variant should be reachable except `.Game_Over`, which has no
+  trigger: the player has no health field, nothing detects player-bacteria
+  collision, and no damage is applied to the player. Making it reachable would
+  mean inventing a death condition, which is a design decision rather than
+  cleanup. It stays a deliberate dead enum value until that decision is made.
+
+## Menu and debug entry
+
+### Decision
+
+`.Menu` renders **only** the menu. The world is not drawn behind it. Today that is
+a title and a keybind hint; the intent is full-screen art behind the same clear
+later.
+
+`level_init` runs in `world_init`, before any state transition, so the menu phase
+does not generate a level in response to input. Enter is a bare state flip.
+
+`--debug` starts directly in `.Playing` with the debug overlay enabled, skipping
+the menu.
+
+### Reason
+
+Drawing the menu over a generated world would make the menu's contents depend on
+whether a level already exists, and would show a level the player has not opted
+into. Keeping the menu self-contained means `render_menu` owns its own clear and
+its own output, and becomes purely a matter of adding art.
+
+`level_init` having exactly one call site is worth more than the purity of
+"nothing exists before the player starts". A second call site for the debug path
+would be the kind of duplication that drifts — it already caused `--level` to be
+silently dropped once.
+
+### Consequences
+
+- `render_state` must handle `.Menu` separately from the world-rendering states.
+  Empty cases are not acceptable: `.Menu` previously fell through with no clear,
+  which smears the previous frame rather than showing a blank screen.
+- The level exists while `.Menu` is displayed; it is simply not drawn or updated.
+  This is harmless while nothing observes it.
+- `--debug` is a development convenience and does not define a gameplay rule. If
+  it ever conflicts with a real startup path, the real path wins.
+- `Level_Transition`, when implemented, will become the owner of level
+  progression. `world_init` will then hold the only initial generation and the
+  transition holds all later ones; the "one call site" rule applies per path, not
+  per program.
 
 ## Sequencing
 
