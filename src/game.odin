@@ -498,14 +498,15 @@ main :: proc() {
 	exit_status := 0
 	game: Game
 
-	defer {
-		game_cleanup(&game)
-		os.exit(exit_status)
-	}
 
 	if !initialize_sdl(&game) {
 		exit_status = 1
 		return
+	}
+
+	defer {
+		game_cleanup(&game)
+		os.exit(exit_status)
 	}
 	game_init(&game)
 

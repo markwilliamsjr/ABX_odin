@@ -2,6 +2,7 @@ package main
 
 import "core:fmt"
 import "core:os"
+import "core:strconv"
 
 CLI_State :: enum {
 	RUN,
@@ -20,6 +21,7 @@ config_default :: proc(config: ^Config) {
 	config.no_vsync = false
 	config.level = 1
 	config.has_seed = false
+	config.seed = 1
 }
 
 parse_args :: proc(config: ^Config, args: []string) -> CLI_State {
@@ -29,8 +31,44 @@ parse_args :: proc(config: ^Config, args: []string) -> CLI_State {
 		if args[index] == "--debug" {
 			config.debug = true
 			index += 1
+		} else if args[index] == "--seed" {
+			if (index + 1) >= len(args) {
+				return .ERROR
+			}
+			seed, ok := strconv.parse_u64(args[index + 1])
+			if !ok {
+				fmt.eprintfln("Invalid value. Must be a number and must be 0 or greater")
+				return .ERROR
+			}
+			if seed < 1 {
+				fmt.eprintfln("Number must be 0 or greater")
+				return .ERROR
+			}
+			config.has_seed = true
+			config.seed = seed
+			index += 2
+		} else if args[index] == "--level" {
+			if (index + 1) >= len(args) {
+				return .ERROR
+			}
+			level, ok := strconv.parse_int(args[index + 1])
+			if !ok {
+				fmt.eprintfln("Invalid value. Must be a number and must be 1 or greater")
+				return .ERROR
+			}
+			if level < 1 {
+				fmt.eprintfln("Number must be 1 or greater")
+				return .ERROR
+			}
+			config.level = level
+			index += 2
+		} else if args[index] == "--no-vsync" {
+			config.no_vsync = true
+			index += 1
+		} else if args[index] == "-h" || args[index] == "--help" {
+			return .HELP
 		} else {
-			fmt.printf("WRONG")
+			fmt.eprintfln("Command not found, --help for commands")
 			return .ERROR
 		}
 	}
