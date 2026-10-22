@@ -101,16 +101,24 @@ initialize_sdl :: proc(g: ^Game) -> bool {
 
 game_init :: proc(game: ^Game) {
 	now := time.now()
-	game.world.master_seed = u64(time.time_to_unix_nano(now))
+	if game.config.has_seed {
+		game.world.master_seed = game.config.seed
+	} else {
+		game.world.master_seed = u64(time.time_to_unix_nano(now))
+	}
 	assets_init(&game.assets, game.renderer)
-	world_init(&game.world)
+	world_init(game)
 	debug_init(&game.debug)
 }
 
-world_init :: proc(world: ^World) {
-	world.state = .Menu
-	world.player = player_init(SCREEN_WIDTH, SCREEN_HEIGHT)
-	level_init(&world.bacteria, &world.level, world.master_seed, 1)
+world_init :: proc(game: ^Game) {
+	if game.config.debug {
+		game.world.state = .Playing
+	} else {
+		game.world.state = .Menu
+	}
+	game.world.player = player_init(SCREEN_WIDTH, SCREEN_HEIGHT)
+	level_init(&game.world.bacteria, &game.world.level, game.world.master_seed, game.config.level)
 }
 
 assets_init :: proc(asset: ^Assets, renderer: ^sdl.Renderer) {
@@ -498,6 +506,17 @@ main :: proc() {
 	exit_status := 0
 	game: Game
 
+	cli_state := parse_args(&game.config, os.args[:])
+
+	switch cli_state {
+	case .RUN:
+	case .HELP:
+		help_useage()
+		return
+	case .ERROR:
+		help_useage()
+		os.exit(1)
+	}
 
 	if !initialize_sdl(&game) {
 		exit_status = 1
@@ -509,7 +528,7 @@ main :: proc() {
 		os.exit(exit_status)
 	}
 	game_init(&game)
-
+	game.debug.debug_enabled = game.config.debug
 	event: sdl.Event
 	last_time := sdl.GetTicks()
 	running := true

@@ -37,11 +37,14 @@ parse_args :: proc(config: ^Config, args: []string) -> CLI_State {
 			}
 			seed, ok := strconv.parse_u64(args[index + 1])
 			if !ok {
-				fmt.eprintfln("Invalid value. Must be a number and must be 0 or greater")
+				fmt.eprintfln(
+					"Invalid value %q. Must be a number and must be 0 or greater",
+					args[index + 1],
+				)
 				return .ERROR
 			}
 			if seed < 1 {
-				fmt.eprintfln("Number must be 0 or greater")
+				fmt.eprintfln("Number %q must be 0 or greater", args[index + 1])
 				return .ERROR
 			}
 			config.has_seed = true
@@ -53,11 +56,14 @@ parse_args :: proc(config: ^Config, args: []string) -> CLI_State {
 			}
 			level, ok := strconv.parse_int(args[index + 1])
 			if !ok {
-				fmt.eprintfln("Invalid value. Must be a number and must be 1 or greater")
+				fmt.eprintfln(
+					"Invalid value %q for level. Must be a number and must be 1 or greater",
+					args[index + 1],
+				)
 				return .ERROR
 			}
 			if level < 1 {
-				fmt.eprintfln("Number must be 1 or greater")
+				fmt.eprintfln("Number %q must be 1 or greater", args[index + 1])
 				return .ERROR
 			}
 			config.level = level
@@ -68,14 +74,14 @@ parse_args :: proc(config: ^Config, args: []string) -> CLI_State {
 		} else if args[index] == "-h" || args[index] == "--help" {
 			return .HELP
 		} else {
-			fmt.eprintfln("Command not found, --help for commands")
+			fmt.eprintfln("Command %q not found, --help for commands", args[index])
 			return .ERROR
 		}
 	}
 	return .RUN
 }
 
-useage :: proc() {
+help_useage :: proc() {
 	fmt.println("ABX!")
 	fmt.println("")
 	fmt.println("Useage: abx [args]")
