@@ -112,17 +112,39 @@ level_init :: proc(bacteria: ^Bacteria, level: ^Level, master_seed: u64, level_n
 	wave_rng := runtime.default_random_generator(&wave_rng_state)
 	level.wave_count = wave_count_picker(level.level_number, wave_rng)
 
+	base := level_params.enemy_budget / level.wave_count
+	extra := level_params.enemy_budget % level.wave_count
+
 	for i in 0 ..< level.wave_count {
+		share := base + (1 if i < extra else 0)
+		share = max(share, WAVE_ENEMY_FLOOR)
+
+		band: int
+		block_number := (level.level_number - 1) / 5
+		if block_number == 0 {
+			band = 0
+		} else {
+			band = 1
+		}
+
 		wave_seed := derive_seed(level_seed, .Wave, i)
-		wave_init(
-			&level_params,
-			&level.wave[i],
-			wave_seed,
-			level_params.enemy_budget,
-			level_number,
-		)
+
+		jitter_rng_state := rand.create(derive_seed(wave_seed, .Wave, 0))
+		jitter_rng := runtime.default_random_generator(&jitter_rng_state)
+		jitter: int
+		if -band == band {
+			jitter = -band
+		} else {
+
+			jitter = rand.int_range(-band, band, jitter_rng)
+		}
+
+		share = clamp(share + jitter, WAVE_ENEMY_FLOOR, MAX_ENEMIES)
+
+		wave_init(&level_params, &level.wave[i], wave_seed, share, level_number)
 		fmt.printfln("%v", i)
-		fmt.printfln("%v", wave_seed)
+		fmt.printfln("%v", share)
+		fmt.printfln("%v", level_params.enemy_budget)
 	}
 
 }
@@ -224,10 +246,16 @@ generate_entry_points :: proc(
 
 wave_count_picker :: proc(level: int, wave_rng: runtime.Random_Generator) -> int {
 	block_number := (level - 1) / 5
+	if block_number == 0 {
+		if 1 == min(level, 4) {
+			return 1
+		}
+		return rand.int_range(1, min(level, 4), wave_rng)
+	}
 	min := 1 + block_number * 2
 	max := min + 3
 	if min > MAX_WAVES && max > MAX_WAVES {
-		return rand.int_range(MAX_WAVES, MAX_WAVES, wave_rng)
+		return MAX_WAVES
 	}
 	if max > MAX_WAVES {
 		return rand.int_range(min, MAX_WAVES, wave_rng)
