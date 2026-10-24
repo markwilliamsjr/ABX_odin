@@ -107,14 +107,24 @@ wave_init :: proc(wp: ^WaveParams, wave: ^Wave, wave_seed: u64, enemy_count, lev
 level_init :: proc(bacteria: ^Bacteria, level: ^Level, master_seed: u64, level_number: int) {
 	level.level_number = level_number
 	level_seed := derive_seed(master_seed, .Level, level.level_number)
-	wave_seed := derive_seed(level_seed, .Wave, 0)
 	level_params := level_to_params(level.level_number)
-
 	wave_rng_state := rand.create(derive_seed(level_seed, .Level, 0))
 	wave_rng := runtime.default_random_generator(&wave_rng_state)
 	level.wave_count = wave_count_picker(level.level_number, wave_rng)
 
-	wave_init(&level_params, &level.wave[0], wave_seed, level_params.enemy_budget, level_number)
+	for i in 0 ..< level.wave_count {
+		wave_seed := derive_seed(level_seed, .Wave, i)
+		wave_init(
+			&level_params,
+			&level.wave[i],
+			wave_seed,
+			level_params.enemy_budget,
+			level_number,
+		)
+		fmt.printfln("%v", i)
+		fmt.printfln("%v", wave_seed)
+	}
+
 }
 
 // ---- Update ----
