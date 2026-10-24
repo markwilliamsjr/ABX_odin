@@ -15,16 +15,26 @@ As the player moves through levels, different types of bacteria become able to
 spawn.
 
 A **level** is a sequence of waves. Some levels contain a single wave; others
-contain more. The number is drawn from the run seed, with the range growing as
+contain more. The number is drawn from the level's seed, with the range growing as
 levels increase.
 
 A **wave** determines:
 
-- number of enemies
+- number of enemies (a share of the level's budget)
 - formation
 - formation bounds
 - enemy types
 - spawn information
+
+A level's `3 + level*2` figure is an **enemy budget**, not a per-wave count. It is
+split across the level's drawn waves, with a floor of three per wave; the floor
+wins, so a level may exceed its budget by a few bacteria. Per-wave sizes therefore
+stay small (roughly 3–6) while level length carries most of the growth.
+
+Generation variance ramps with level. Early levels are close to authored: level 1
+is always a single wave of five, entering from the same point. Wave-count range,
+per-wave count jitter, and entry-point choice all widen as levels increase, so
+later levels feel generated. Same-seed reproducibility is unaffected.
 
 Formation generation happens before spawning.
 
@@ -129,8 +139,11 @@ root
 └─ derive_seed(root, .Level, level_number)     → level_seed
    ├─ derive_seed(level_seed, .Level, 0)       → the level's wave count
    ├─ derive_seed(level_seed, .Wave, i)        → wave_seed, i = 0..wave_count-1
-   │  └─ derive_seed(wave_seed, .Entry, 0)    → entry path rng
-   └─ derive_seed(wave_seed, .Level, 0)        → that wave's flee threshold
+   │  ├─ derive_seed(wave_seed, .Entry, 0)    → entry path rng
+   │  ├─ derive_seed(wave_seed, .Level, 0)    → that wave's flee threshold
+   │  └─ derive_seed(wave_seed, .Wave, 0)     → that wave's count jitter
+   └─ the level's enemy budget is split across its waves; the split itself is
+      arithmetic, not a draw
 ```
 
 `level_seed` carries per-level decisions; `wave_seed` carries per-wave decisions.
@@ -161,3 +174,7 @@ a human at the controls.
 
 Formations, the mix of bacteria types, total bacteria spawned, and the layout are
 all procedurally generated from a set of rules.
+
+For levels 1–2, entry is pinned to a single top-center point by passing a
+one-element list of available points to the entry generator. Later levels draw
+from the full set.

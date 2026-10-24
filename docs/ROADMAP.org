@@ -60,15 +60,18 @@ because ~level_init~ initializes just ~wave[0]~.**
 #+begin_example
 master_seed
   └─ .Level, level_number → level_seed        (level_init)
-       ├─ .Wave, 0        → wave_seed         (level_init)
+       ├─ .Wave, i        → wave_seed         (level_init, i = 0..wave_count-1)
        │    ├─ .Entry, 0 → entry points      (wave_init)
-       │    └─ .Level, 0 → flee threshold    (wave_init)
+       │    ├─ .Level, 0 → flee threshold    (wave_init)
+       │    └─ .Wave, 0  → count jitter      (wave_init)
        └─ .Level, 0       → wave-count draw   (level_init)
 #+end_example
 
-Six distinct ~(parent, category, number)~ triples, no reuse. Three of them reuse
-the ~.Level~ category with a small number below the root derivation, which the
-Decision sanctions.
+Seven distinct ~(parent, category, number)~ triples, no reuse. The count jitter
+adds ~(wave_seed, .Wave, 0)~ — the same category as the wave seed's own link, but
+under a different parent, which the chaining rule permits. Three triples reuse the
+~.Level~ category with a small number below the root derivation, which the Decision
+sanctions.
 
 ** Threshold design (implemented)
 
@@ -99,6 +102,13 @@ rather than sharing a level-wide value.
 ** Deliberately provisional: the 500 floor and the /20 span were picked for shape,
 not for balance, and are expected to be tuned in play.**
 
+** Superseded count model (2026-10-24): the ~enemies~ and ~kills to cross~ columns
+below assume ~3 + level*2~ enemies in every wave. Enemy counts are now a level
+budget split across the level's waves, so per-wave sizes are roughly 3–6 rather
+than 5–43. The curve and its fraction-destroyed semantics are unchanged; the
+absolute columns need re-derivation and are kept only as the record of the curve's
+shape. See Decisions "Enemy counts".**
+
 | level | base | enemies (~3 + level*2~) | kills to cross | flee |
 |-------+------+-------------------------+-----------------+------|
 |     1 |  950.0 |                     5 |               5 | no  |
@@ -112,9 +122,11 @@ not for balance, and are expected to be tuned in play.**
 |    20 |  502.8 |                    43 |              22 | 21   |
 |   21+ |  500.0 |                    45+|               — | ~half|
 
-Nothing flees through level 4; one flees at level 5. The ±50 spread is what makes
-that "possibly" one — at level 5 the band is 857–957, crossing at either 12 or 13
-kills.
+** Under the superseded per-wave model, nothing fled through level 4 and one wave
+fled at level 5; the "12 or 13 kills" figures below the table are per-wave and no
+longer apply. The fraction-destroyed curve still means early waves do not flee, but
+under the budget split a level-5 wave holds 3–4 bacteria, so the crossing arithmetic
+must be re-derived.**
 
 ** Recomputed after the amplitude was corrected from 255 to 225. An earlier
 version of this table was written against ~600 + 255 * (1 + cos)~, whose crest
@@ -122,14 +134,11 @@ reached 1110 — a value no wave could ever cross, which silently disabled fleei
 for the first several levels. The corrected numbers are what ~threshold_picker~
 now produces; the code is right and this table was catching up.**
 
-** Two consequences to watch in play, both from threshold descending while wave
-size grows:
+** Two consequences of the budget split, replacing the per-wave reading:
 
-- The tail is severe. By level 15 a wave resolves with 13 of 33 still standing.
-  Escalation past that point comes mostly from the roster, not from the fights.
-- Absolute kills-to-cross barely rises after level 10 (19 at 10, 22 at 20),
-  because the threshold falls about as fast as enemy count grows. Each level does
-  not demand strictly more kills than the last.
+- Per-wave size stays roughly 3–6, so a wave crosses its threshold after only a
+  few kills (at 500 permille, three of five). Escalation within a level comes from
+  the number of waves, not from each wave growing.
 - The roster fills faster, and the roster bound drops the *oldest* entry — so the
   cap discards precisely the most-escaped, most-buffed bacteria. Worth revisiting
   when the roster lands; it is not tunable away.
@@ -153,11 +162,14 @@ block.**
 |     4 |  21–25 |   9–10 |
 |    5+ |    26+ |      10 |
 
-Floor is 1 at block 0, deliberately — a level may be a single wave. Adjacent
-blocks overlap by two values, so escalation is non-decreasing rather than strictly
-increasing. The range is pinned at ~MAX_WAVES~ from block 4: the draw still
-consumes its seed triple but always returns 10. ~MAX_WAVES~ was left at 10 to be
-judged in play; raising it widens the saturated tail.**
+Block 0 now draws ~[1, min(level, 4)]~ rather than ~1–4~: level 1 is always one
+wave, level 2 one or two, level 3 one to three, levels 4–5 one to four. This is the
+early-level determinism ramp; level 1's draw still consumes its seed triple even
+though the range has collapsed. Adjacent blocks overlap by two values, so escalation
+is non-decreasing rather than strictly increasing. The range is pinned at
+~MAX_WAVES~ from block 4: the draw still consumes its seed triple but always
+returns 10. ~MAX_WAVES~ was left at 10 to be judged in play; raising it widens the
+saturated tail.**
 
 *** Prerequisite: State and Input
 
@@ -204,10 +216,25 @@ drawn wave.
       clamped to ~MAX_WAVES~
   - ~wave_count_picker~ — see the formula under Prerequisite: Seeding
 - [ ] Initialize all drawn waves in ~level_init~
-  - ~wave_init~ still takes one ~WaveParams~ from ~level_to_params~, so every
-    wave in a level would be a seeded variant of the same params: same enemy
-    count, same formation, same speed. Whether ~total_enemies~ varies per wave
-    is a design call belonging to this item
+  - Design settled 2026-10-24: ~3 + level*2~ is a level budget split across waves,
+    not a per-wave count. See Decisions "Enemy counts" and "Early-level
+    determinism"
+  - [ ] Rename ~WaveParams.total_enemies~ → ~enemy_budget~ and
+        ~Wave.total_enemies~ → ~enemy_count~; pass ~enemy_count~ explicitly into
+        ~wave_init~
+  - [ ] Loop every drawn wave, deriving ~.Wave, i~, with wave 0 coming out of the
+        same loop so there is one seed path
+  - [ ] Split the budget: base share plus remainder to the earliest waves, floor 3,
+        floor wins
+  - [ ] Apply ±1 per-wave count jitter from
+        ~derive_seed(wave_seed, .Wave, 0)~, band 0 in block 0
+  - [ ] Tighten block 0's wave-count range to ~[1, min(level, 4)]~
+  - [ ] Pin entry to top-center for levels 1–2 by passing a one-element
+        ~available_points~ slice to ~generate_entry_points~
+  - [ ] Show the active wave's ~enemy_count~ in the overlay, alongside
+        ~wave_index~
+  - After the rename, ~level_to_params~ carries the budget and shared wave params,
+    while each wave's count arrives explicitly
 - [x] Thread ~level_to_params(level)~ through, replacing the hardcoded ~1~
 - [ ] Advance ~wave_index~ when the active wave resolves
 - [ ] Mark the level complete when ~wave_index~ exceeds the level's wave count
@@ -329,7 +356,11 @@ magnitudes until they settle.**
 
 - [ ] Seeded replay: same seed, two runs, identical wave composition,
       formations, flee thresholds, and return schedules
-- [ ] Different seeds produce observably different runs
+- [ ] Different seeds produce observably different runs from level 3 onward;
+      levels 1–2 are deliberately near-identical
+- [ ] Early levels are seed-insensitive: level 1 is always one wave of five with a
+      top-center entry across many seeds
+- [ ] Wave-count ranges widen with level as documented
 - [ ] Flee and return do not perturb determinism
 - [x] Confirm ~sdl.GetTicks()~ appears in no generation or threshold decision
   - The threshold draw is wall-clock free. The crossing test that will read it is
@@ -359,6 +390,14 @@ Blockers, not tasks. Each must be decided before the work that depends on it.
 
 ** Resolved since the last update
 
+- Enemy count model — `3 + level*2` is a level budget split across the drawn
+  waves, with a floor of 3, and the floor wins. See Decisions "Enemy counts".
+- Early-level variance — block 0's wave count draws `[1, min(level, 4)]`, count
+  jitter is 0 in block 0, and entries are pinned to top-center for levels 1–2.
+  See Decisions "Early-level determinism".
+- Jitter band — ±3 was chosen while per-wave counts were assumed to be 5–43; the
+  budget model made shares 3–6, so the band is now ±1.
+- Seed count — the per-wave count jitter adds a seventh distinct triple.
 - Threshold implementation scope — assign-and-display only, deliberately. The
   crossing test was left to Wave Resolution rather than pulled forward, because
   it needs a destroyed count and that runs straight into the ~enemy_indices~

@@ -38,8 +38,10 @@ running total).
 ### Consequences
 
 - Two distinct counters are required. Conflating them is easy and hard to notice.
-- `Level.wave_count` is the global total, used for debug display and seed
-  derivation. A separate `wave_index` tracks position within the current level.
+- `Level.wave_count` is the current level's own wave total, drawn from the level
+  seed. A separate `wave_index` tracks position within the current level. An
+  earlier reading of `wave_count` as a run-wide total is superseded: nothing
+  accumulates across levels.
 - `ARCHITECTURE.md` describes a wave's contents in detail but says almost nothing
   about what a *level* is. That gap is now closed here.
 
@@ -62,13 +64,120 @@ level structure itself part of what the seed determines.
 - The draw must be clamped to `MAX_WAVES`.
 - The level-end condition is that all of a level's waves are resolved.
 
+## Enemy counts
+
+### Decision
+
+`3 + level * 2` is a **level-wide enemy budget**, not a per-wave count. `level_init`
+splits it across the level's drawn waves:
+
+- `base = budget / wave_count`; the remainder `budget % wave_count` goes one each
+  to the earliest waves, so the shares sum exactly to the budget.
+- Every share has a floor of **3**, and **the floor wins**: if
+  `wave_count * 3 > budget`, the level exceeds its budget.
+- Each share then takes a seeded jitter (band defined under "Early-level
+  determinism"), clamped to `[3, MAX_ENEMIES]`.
+
+Naming follows the split: `WaveParams.total_enemies` becomes `enemy_budget`,
+`Wave.total_enemies` becomes `enemy_count`, and `wave_init` takes `enemy_count` as
+an explicit argument instead of reading it from the params struct.
+
+### Reason
+
+The original intent was a level budget split over waves, but `wave_init` never
+sees `wave_count`, so the value had quietly become per-wave. The two readings are
+not close: under the per-wave reading a level-10 level fields 69–138 bacteria
+(23 per wave times 3–6 waves), against a budget of 23. The shared name made the
+drift invisible, and the roadmap's threshold table was written against the drifted
+meaning.
+
+Passing the count explicitly follows the `level_number` precedent: a function's
+inputs are visible at its call site, and `wave_init` cannot consume the budget by
+accident once it never receives it.
+
+Floor-wins was chosen over shrinking the drawn wave count because `wave_count` is a
+seeded structural draw; quietly reducing it to fit the budget would make the level
+disagree with its own seed. It was chosen over a soft floor because a one- or
+two-enemy wave makes the flee threshold nearly meaningless.
+
+Three is a provisional floor: high enough that a wave is more than a couple of
+kills, low enough that the budget stays roughly honest.
+
+### Consequences
+
+- Levels can exceed their budget. With the early wave-count ramp this happens at
+  levels 4, 6 and 7 only, by at most 3 bacteria. The budget is a difficulty target,
+  not an allocation invariant.
+- Per-wave size stays roughly 3–6 for the whole run; level length carries most of
+  the growth. This is the count analogue of the wave-count curve, and it changes
+  what the threshold table describes.
+- The `MAX_ENEMIES` clamp becomes defensive. `3 + level*2` exceeds 50 from level
+  24, but the budget is never indexed directly — only the split share is — so the
+  overflow is removed structurally by the split. The clamp stays as the guard for
+  the case where one wave carries the whole budget, and as the final bound on a
+  share.
+- The threshold table in `ROADMAP.org` must be re-derived. The threshold remains
+  scale-free (a per-mille fraction destroyed), but at 3–6 enemies one kill is
+  167–333 permille, so crossings are coarse.
+
+## Early-level determinism
+
+### Decision
+
+Generation variance ramps with level. Early levels are close to authored; later
+levels are heavily seed-sensitive.
+
+- **Wave count**: block 0 (levels 1–5) draws `[1, min(level, 4)]`. Level 1 is
+  always one wave, level 2 one or two, level 3 one to three, levels 4–5 one to
+  four. Blocks 1+ keep their existing ranges.
+- **Per-wave count jitter**: band 0 in block 0, ±1 from block 1 onward.
+- **Entry point**: levels 1–2 pin entry to top-center (`ENTRY_POINTS[2]`); levels
+  3+ draw from the full set.
+
+The jitter draw still runs every wave even when its band is 0, and the wave-count
+draw still runs at level 1 even though its range has collapsed to a single value.
+
+### Reason
+
+The determinism contract says the same seed reproduces the same run. It says
+nothing about how much a level changes when the seed changes. The intended feel is
+an authored, predictable opening that becomes procedurally varied as the run
+progresses, matching how wave counts and thresholds already scale.
+
+Without the ramp the opening was the most seed-sensitive part of the run: block 0's
+`1–4` is the widest relative range in the game (4x), while block 4's `9–10` is the
+narrowest. A level 1 could be a single five-enemy wave or four waves of three,
+entering from any of fifteen points.
+
+Pinning entry through a one-element `available_points` slice reuses
+`generate_entry_points` unchanged. A deterministic flag or an early branch inside
+the generator would add a second code path for the same outcome.
+
+### Consequences
+
+- Level 1 is structurally identical across seeds: one wave, five enemies, same
+  formation, same top-center entry. Its `threshold_permille` still varies over
+  900–1000, but that is unobservable: a five-enemy wave crosses every threshold in
+  that band only at full destruction.
+- The seed graph is unchanged. Degenerate draws still consume their triples,
+  following the `MAX_WAVES` saturation precedent.
+- The floor/budget overrun is confined to levels 4, 6 and 7.
+- Level 5 to 6 has a structural discontinuity: the maximum rises 4 to 6 while the
+  minimum jumps 1 to 3. It is inherited from block-based ranges, not introduced by
+  the ramp.
+- If formation regions ever multiply, the pinned entry slice must hold at least
+  `region_count` points, or `generate_entry_points` returns `ok = false`.
+- Later variance sources (formation variety, species choice) should be gated by
+  level the same way, so the opening does not drift back toward generated.
+
 ## Fleeing and returning
 
 ### Decision
 
-Bacteria flee when the number remaining in a wave drops below a percent
-threshold. That threshold is a seeded random draw, rolled **once per wave** at
-spawn time and compared deterministically on every subsequent frame.
+Bacteria flee when the fraction of the wave **destroyed** reaches a per-wave
+threshold, expressed in per-mille. That threshold is a seeded random draw, rolled
+**once per wave** at spawn time and compared deterministically on every subsequent
+frame.
 
 Fled bacteria are not removed. They withdraw and return in a later wave,
 strengthened by **resistance buffs**. On return they are restored to spawn max
@@ -104,7 +213,7 @@ actually behave.
   *and* scheduled to return), still alive (unresolved).
 - Fleeing is evaluated per wave, not per level.
 - A fled bacterium requires a pending roster that outlives the wave, so that
-  roster lives on `Level` or `World`, not on `Wave`.
+  roster lives on `World`, not on `Wave`. See "Return scope".
 - Return scheduling must use seeded RNG, or determinism breaks.
 - **Pending bacteria carry across level boundaries.** They do not die at the
   end of a level. See "Return scope" below.
@@ -402,15 +511,18 @@ deterministic enemy waves"* — waves, not runs.
 - **Verification means "generate twice, compare," plus "same branch events."** It
   does not mean identical runs. Identical *flee behavior* is untestable with a
   human at the controls and should not be asserted.
+- **Seed sensitivity is separate from determinism.** "Same seed, same run" is the
+  contract; how much the run changes when the *seed* changes is a feel decision.
+  Early levels are deliberately near-insensitive to the seed and later levels are
+  not (see "Early-level determinism"). This does not weaken the contract.
 
-### Open question (not yet decided)
+### Resolved
 
-- **What "same seed, same results" means is now settled, but the flee threshold
-  direction is not.** The existing `WaveParams.threshold = 0.8`
-  (`src/procedural.odin:127`) is ambiguous between *fraction killed* and *fraction
-  remaining*. Read as "fraction remaining," 0.8 would mean bacteria flee while 80%
-  are still alive, which inverts the intended difficulty. Decide the direction, and
-  express it unambiguously in code rather than as a bare float.
+The flee threshold direction is settled: a per-mille fraction **destroyed**, drawn
+once per wave from `derive_seed(wave_seed, .Level, 0)`. The old
+`WaveParams.threshold = 0.8` was ambiguous between fraction killed and fraction
+remaining and has been removed, so the seed is the only source of a threshold. See
+`ROADMAP.org` under "Threshold design".
 
 ## State machine
 
