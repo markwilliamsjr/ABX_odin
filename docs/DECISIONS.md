@@ -524,6 +524,78 @@ once per wave from `derive_seed(wave_seed, .Level, 0)`. The old
 remaining and has been removed, so the seed is the only source of a threshold. See
 `ROADMAP.org` under "Threshold design".
 
+## Frame pacing
+
+### Decision
+
+Vsync is enabled by default and is the game's normal frame pacer. `--vsync
+<true|false>` controls it explicitly; the old `--no-vsync` flag is replaced.
+
+When vsync is off, a software limiter paces the loop at `--fps`, default **60**.
+`--fps 0` disables the limiter, so a no-vsync run spins unbounded again. With
+vsync on, `--fps` has no effect.
+
+The limiter uses a deadline accumulator, not a fixed sleep: each frame advances
+`next_deadline` by `1000 / fps`, sleeps only for the whole milliseconds remaining,
+and resets the deadline to now when a frame overruns. It runs after
+`RenderPresent`.
+
+### Reason
+
+`--no-vsync` was parsed and advertised but never read: `RENDERER_FLAGS` always
+included `PRESENTVSYNC` (`src/game.odin:17`), so the renderer was never actually
+vsync-free and the flag did nothing. Replacing it with an explicit boolean makes
+the setting honest and lets a test run turn vsync off without a source edit.
+
+With vsync genuinely off, the loop has no upper bound. Some players turn vsync off
+deliberately; without a replacement pacer they get an unbounded loop. Two things
+follow. CPU use is unbounded for no visual benefit. And because `delta_time` comes
+from `GetTicks()` at millisecond resolution (`src/game.odin:539`), many frames
+compute `delta_time == 0`, so motion stalls on those frames instead of advancing.
+A 60 fps default restores a sane cadence and matches the rate the game is tuned
+against.
+
+The cap applies only when vsync is off, so a vsync'd run on a 120/144 Hz display
+keeps the monitor's rate. A deadline accumulator was chosen over sleeping the
+remaining frame budget because truncation and late wakes accumulate as drift;
+deadline accounting keeps the average rate correct without catch-up bursts.
+
+### Consequences
+
+- `config.no_vsync` becomes `config.vsync`, defaulting to `true`; the CLI shape
+  is `--vsync <true|false>`, space-separated and parsed with
+  `strconv.parse_bool`.
+- `--fps` is silently ignored when vsync is on, and `--help` says so. It is not
+  an error, so a saved command line still works if vsync is flipped.
+- `--fps 0` restores the unbounded loop deliberately. It is a testing value, not
+  a supported play mode.
+- The limiter is pacing, not determinism. It does not supply the fixed tick
+  counter and does not make any decision reproducible. See "Determinism".
+- `delta_time` keeps its source and resolution. Capping removes most zero-length
+  frames but does not make them structurally impossible; that is the tick work.
+- "Vsync unavailable" is not detected. The limiter keys strictly off
+  `config.vsync`; if a driver ignores `PRESENTVSYNC`, the loop still relies on
+  it.
+- 60 is a default, not a hard design rule. Changing the target is a CLI concern,
+  not a gameplay decision.
+- The options are eventually exposed in a settings menu. Until that exists, the
+  CLI flags are both the testing path and the only path. The limiter must read
+  `config.fps` live rather than caching the target at startup, or a menu change
+  will not take effect until restart.
+
+### Open questions (not yet decided)
+
+- **Settings precedence.** Once a settings menu persists vsync and the FPS cap,
+  does a CLI flag override the saved value for that run, or write through to it?
+  The usual answer is defaults < saved < CLI, session-only, but it is not
+  decided.
+- **Runtime vsync failure.** `SDL_RenderSetVSync` can fail on some backends. Is
+  the fallback a restart prompt, or a renderer recreation that re-inits assets?
+- **Menu structure.** A settings page is either a mode inside `.Menu` or a new
+  `GameState`. `.Menu` currently owns only a title and a hint, and the skill tree
+  is already promised `Level_Transition`, so the two should not compete for the
+  same mount point.
+
 ## State machine
 
 ### Decision

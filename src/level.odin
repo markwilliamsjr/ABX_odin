@@ -35,19 +35,19 @@ ENTRY_POINTS := [ENTRY_POINT_COUNT]sdl.FPoint {
 // ---- Types ----
 
 Wave :: struct {
-	level, total_enemies, spawn_count, species_unlocked, max_simult_divers: int,
-	threshold_permille:                                                     int,
-	spawn_delay, spawn_timer, dive_delay, dive_timer, speed_scalar:         f32,
-	path:                                                                   PathType,
-	enemy_indices:                                                          [MAX_ENEMIES]int,
-	is_active, formation_complete, threshold_crossed:                       bool,
-	formation_complete_time:                                                u64,
-	control_points:                                                         [3]sdl.FPoint,
-	formation_positions:                                                    [MAX_REGIONS][MAX_ENEMIES]sdl.FPoint,
-	region_start:                                                           [MAX_REGIONS]sdl.FPoint,
-	region_enemy_count:                                                     [MAX_REGIONS]int,
-	spawn_region, spawn_index:                                              int,
-	diver_selection_rule:                                                   DiverSelectionRule,
+	level, enemy_count, spawn_count, species_unlocked, max_simult_divers: int,
+	threshold_permille:                                                   int,
+	spawn_delay, spawn_timer, dive_delay, dive_timer, speed_scalar:       f32,
+	path:                                                                 PathType,
+	enemy_indices:                                                        [MAX_ENEMIES]int,
+	is_active, formation_complete, threshold_crossed:                     bool,
+	formation_complete_time:                                              u64,
+	control_points:                                                       [3]sdl.FPoint,
+	formation_positions:                                                  [MAX_REGIONS][MAX_ENEMIES]sdl.FPoint,
+	region_start:                                                         [MAX_REGIONS]sdl.FPoint,
+	region_enemy_count:                                                   [MAX_REGIONS]int,
+	spawn_region, spawn_index:                                            int,
+	diver_selection_rule:                                                 DiverSelectionRule,
 }
 
 Level :: struct {
@@ -59,7 +59,7 @@ Level :: struct {
 
 // ---- Init ----
 
-wave_init :: proc(wp: ^WaveParams, wave: ^Wave, wave_seed: u64, level: int) {
+wave_init :: proc(wp: ^WaveParams, wave: ^Wave, wave_seed: u64, enemy_count, level: int) {
 	wave.level = level
 
 	entry_rng_state := rand.create(derive_seed(wave_seed, .Entry, 0))
@@ -84,7 +84,7 @@ wave_init :: proc(wp: ^WaveParams, wave: ^Wave, wave_seed: u64, level: int) {
 	base := BasicGenerationParams {
 		bounds      = region_size[0],
 		min_spacing = 5.0,
-		count       = wp.total_enemies,
+		count       = enemy_count,
 		positions   = &wave.formation_positions[0],
 	}
 	result := generate_formation(&base, wp.formation_params)
@@ -98,7 +98,7 @@ wave_init :: proc(wp: ^WaveParams, wave: ^Wave, wave_seed: u64, level: int) {
 	wave.speed_scalar = wp.speed_scalar
 	wave.spawn_delay = wp.spawn_delay
 	wave.is_active = true
-	wave.total_enemies = wp.total_enemies
+	wave.enemy_count = enemy_count
 	wave.max_simult_divers = wp.max_simult_divers
 	wave.diver_selection_rule = wp.diver_selection_rule
 	wave.formation_complete = false
@@ -114,12 +114,12 @@ level_init :: proc(bacteria: ^Bacteria, level: ^Level, master_seed: u64, level_n
 	wave_rng := runtime.default_random_generator(&wave_rng_state)
 	level.wave_count = wave_count_picker(level.level_number, wave_rng)
 
-	wave_init(&level_params, &level.wave[0], wave_seed, level_number)
+	wave_init(&level_params, &level.wave[0], wave_seed, level_params.enemy_budget, level_number)
 }
 
 // ---- Update ----
 wave_update :: proc(wave: ^Wave, bacteria: ^Bacteria, delta_time: f32) {
-	if wave.spawn_count < wave.total_enemies {
+	if wave.spawn_count < wave.enemy_count {
 		wave.spawn_timer += delta_time
 		if wave.spawn_delay > wave.spawn_timer do return
 
@@ -146,7 +146,7 @@ wave_update :: proc(wave: ^Wave, bacteria: ^Bacteria, delta_time: f32) {
 	}
 
 	// Check if holding
-	if wave.spawn_count == wave.total_enemies && !wave.formation_complete {
+	if wave.spawn_count == wave.enemy_count && !wave.formation_complete {
 		all_holding := true
 		for i in 0 ..< wave.spawn_count {
 			if bacteria.cold[wave.enemy_indices[i]].bacteria_state != .Holding {
@@ -160,7 +160,6 @@ wave_update :: proc(wave: ^Wave, bacteria: ^Bacteria, delta_time: f32) {
 		}
 	}
 }
-
 wave_dive_update :: proc(wave: ^Wave, bacteria: ^Bacteria, delta_time: f32) {
 	if !wave.formation_complete do return
 

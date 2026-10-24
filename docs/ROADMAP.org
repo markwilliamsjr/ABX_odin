@@ -13,36 +13,10 @@ Level advancement and transition, plus the minimum needed to observe it.
 
 *** Prerequisite: Seeding
 
-Complete. Kept for the seed-assignment reference and the one unfinished check
-(collision verification, which needs every wave initialized). The next start
-point is Level and Wave Lifecycle.
+Complete except collision verification, which needs every wave initialized.
+Kept for the seed-assignment reference; the finished items are summarized under
+Completed. The next start point is Level and Wave Lifecycle.
 
-- [x] Add ~.Level~ to ~SeedCategory~
-- [x] Chain wave seeds from a per-level seed rather than from the run seed
-      directly (replaces the hardcoded ~0~ in ~level_init~)
-  - ~level_seed = derive_seed(run_seed, .Level, level_number)~
-  - ~wave_seed = derive_seed(level_seed, .Wave, wave_index)~
-  - Uniqueness invariant is per ~(parent, category, number)~ triple, not a global
-    wave counter. See Decisions for why the global counter was rejected.
-  - ~level_init~ now takes ~(master_seed, level_number)~ and owns the whole
-    chain; ~world_init~ passes the run seed through and no longer names a seed
-    category itself
-- [x] Seed the per-level wave-count draw from ~derive_seed(level_seed, .Level, 0)~
-  - Each draw site constructs its own throwaway RNG, so any draw is recomputable
-    from its triple alone with no shared generator
-- [x] Seed and assign the per-wave flee threshold from
-      ~derive_seed(wave_seed, .Level, 0)~, not from a level seed number
-  - ~threshold_picker~ (~src/level.odin:229~), drawn inside ~wave_init~ from a
-    second throwaway state built off ~wave_seed~, so the whole result is
-    recomputable from the triple alone
-  - ~wave_init~ now takes ~level_number~ explicitly rather than reading it from
-    ~WaveParams~, so the curve's input is visible at the call site instead of
-    arriving through a params struct that step 4 was deleting anyway
-  - ~WaveParams.threshold~ removed, so the seed is the only source of a
-    threshold. ~Wave.threshold~ renamed ~threshold_permille~ and retyped to
-    ~int~.
-  - Scope was assign-and-display only. Nothing reads the threshold yet; the
-    crossing test and the membership problem belong to Wave Resolution
 - [ ] Verify no seed collision across levels
   - Blocked until ~level_init~ initializes every drawn wave; only wave 0 exists
   - The level half is now testable: ~--level~ reaches ~level_init~, so levels
@@ -171,50 +145,13 @@ is non-decreasing rather than strictly increasing. The range is pinned at
 returns 10. ~MAX_WAVES~ was left at 10 to be judged in play; raising it widens the
 saturated tail.**
 
-*** Prerequisite: State and Input
-
-Complete. Update and render are both gated on ~world.state~.
-
-- [x] Gate per-frame updates in ~main~ on ~world.state~
-  - Each state gets its own update set, in ~world_update~
-  - ~.Menu~ renders only; ~.Playing~ runs simulation; ~.Level_Transition~ runs
-    transition logic (still a no-op); ~.Paused~ suspends simulation
-  - Extracted as ~world_update~ rather than ~update_simulation~, matching the
-    existing ~*_update~ family
-- [x] Add event handling to leave ~.Menu~ and enter ~.Playing~
-  - Enter (~.RETURN~ only; numpad Enter is not handled)
-  - Esc toggles ~.Playing~ ↔ ~.Paused~ and does nothing elsewhere
-  - K quits, as a testing-only emergency key. Esc no longer quits
-- [x] Show a keybind hint on the menu so the entry action is discoverable
-  - Menu is text only: title, hint, clear. No world behind it
-- [x] Gate rendering on ~world.state~ as well
-  - ~render_state~ mirrors ~world_update~: a full switch over every state
-  - ~#partial switch~ was the original mistake here: it left ~.Paused~ drawing
-    nothing, which smears the back buffer rather than freezing the frame
-- [x] Start directly in ~.Playing~ when ~--debug~ is passed
-  - Skips the menu and enables the overlay. ~level_init~ keeps a single call
-    site in ~world_init~ as a result
-
-** ~.Game_Over~ is deliberately left unreachable for now, and stays a dead enum
-value. It has no trigger: the player has no health field, nothing detects
-player-bacteria collision (~collision_update~, ~src/game.odin:202~, tests bullets
-against bacteria only), and no damage is ever applied to the player. Making it
-reachable means inventing a death condition, which is a design decision rather
-than a cleanup. Recorded here so it does not read as an oversight.**
-
 *** Level and Wave Lifecycle  ← START HERE
 
 The next item is the one that makes the seed chain observable: initializing every
 drawn wave.
 
-- [x] Initialize ~wave_count~ in ~level_init~, keeping it as the level's own total
-  - It was described as "the global total" before the per-level draw existed; it
-    is now the current level's wave count
 - [ ] Add ~wave_index~ to ~Level~ (position within the current level)
   - Wave index starts at 0. Level number is 1-based; do not mix the two
-- [x] Draw a level's wave count by seeded random draw, range growing with level,
-      clamped to ~MAX_WAVES~
-  - ~wave_count_picker~ — see the formula under Prerequisite: Seeding
 - [ ] Initialize all drawn waves in ~level_init~
   - Design settled 2026-10-24: ~3 + level*2~ is a level budget split across waves,
     not a per-wave count. See Decisions "Enemy counts" and "Early-level
@@ -235,21 +172,9 @@ drawn wave.
         ~wave_index~
   - After the rename, ~level_to_params~ carries the budget and shared wave params,
     while each wave's count arrives explicitly
-- [x] Thread ~level_to_params(level)~ through, replacing the hardcoded ~1~
 - [ ] Advance ~wave_index~ when the active wave resolves
 - [ ] Mark the level complete when ~wave_index~ exceeds the level's wave count
-- [x] Fix the debug overlay, which rendered ~wave_count~ as a permanent ~0~
-      because the field was never written
 - [ ] Show ~wave_index~ in the overlay once ~Level~ has the field
-- [x] Show ~threshold_permille~ in the overlay
-  - Third text line in the stack, under wave count. This is the "generate twice,
-    compare" check made visible, and the only way to observe the draw before
-    Wave Resolution reads it
-  - Reads from ~wave[0]~; only wave 0 is initialized today
-  - Note: ~debug.fps~ changes every frame, so the *FPS* line rebuilds its texture
-    60 times a second via ~DestroyTexture~ + ~CreateTextureFromSurface~. That is
-    the overlay's real per-frame cost and it is pre-existing — do not go looking
-    for it in the threshold line
 
 *** Wave Resolution
 
@@ -362,10 +287,6 @@ magnitudes until they settle.**
       top-center entry across many seeds
 - [ ] Wave-count ranges widen with level as documented
 - [ ] Flee and return do not perturb determinism
-- [x] Confirm ~sdl.GetTicks()~ appears in no generation or threshold decision
-  - The threshold draw is wall-clock free. The crossing test that will read it is
-    not written yet, so this covers generation only
-
 
 ** Verification is last by sequence, not by importance. Nothing in this slice is confirmed until it passes.
 
@@ -423,7 +344,7 @@ Blockers, not tasks. Each must be decided before the work that depends on it.
 - Boss flush — bosses clear the roster; fleeing is prohibited there. Boss
   specifics deferred.
 - ~.Game_Over~ scoping — left unreachable for now; it has no trigger. Recorded
-  under Prerequisite: State and Input.
+  under Completed.
 
 ** Determinism
 
@@ -441,24 +362,54 @@ slice makes both harder to verify independently. See Decisions for the full rule
       wall-clock timing
 - [ ] Audit for further wall-clock reads feeding decisions
 
-** Playability Gaps
+** Frame Pacing
 
-Unrelated to the slice above; found while assessing current state.
+Vsync is the normal pacer. The limiter exists only for the path where vsync is
+deliberately off.
 
-- [x] ~parse_args~ in ~src/cli.odin~ declared return type ~CLI_State~ with no
-      terminating return on the fall-through path
-  - It was a real compile error, and the file was in the build: ~core:fmt~ was
-    not imported, ~ERROR~ was unqualified, and the fall-through path had no
-    return. All three fixed. ~odin build src~ is now clean.
-- [x] ~Config.seed~ and ~Config.level~ were never populated by ~parse_args~; only
-      ~--debug~ was handled, and any other argument printed ~WRONG~ and errored
-      out
-  - ~--seed <n>~, ~--level <n>~, ~--no-vsync~, ~-h~ and ~--help~ are implemented.
-    ~--seed~ parses as ~u64~ so negatives are rejected; ~--level~ requires ~>= 1~,
-    because a level below 1 makes ~wave_count_picker~ compute a negative range
-  - ~parse_args~ now runs in ~main~ before ~initialize_sdl~, so help and errors
-    never open a window. ~.ERROR~ exits with ~os.exit(1)~ directly, because the
-    deferred cleanup is not registered on that path
+- [ ] Replace the dead ~--no-vsync~ flag with ~--vsync <true|false>~
+  - ~Config.no_vsync~ → ~Config.vsync~, defaulting to ~true~
+  - ~--no-vsync~ was parsed and advertised but never read: ~RENDERER_FLAGS~
+    always included ~PRESENTVSYNC~ (~src/game.odin:17~)
+- [ ] Add ~--fps <n>~, default ~60~, ~0~ = unlimited
+  - Only meaningful with ~--vsync false~; ignored when vsync is on, and said so
+    in ~--help~
+  - Reject negatives; ~0~ is the only "off" value
+- [ ] Apply ~PRESENTVSYNC~ conditionally in ~initialize_sdl~
+  - Base flags stay ~ACCELERATED~; OR in ~PRESENTVSYNC~ when ~config.vsync~
+- [ ] Add a deadline-accumulator limiter to the main loop, after ~RenderPresent~
+  - ~next_deadline += 1000 / fps~; sleep ~ceil(next_deadline - now)~ only while
+    ahead
+  - On overrun, reset ~next_deadline~ to now instead of catching up
+  - Same clock as ~delta_time~ (~sdl.GetTicks~), so there is one time source
+- [ ] Correct the help text: "simulation runs faster" is false for a delta-time
+      sim, and the flag it describes no longer exists
+- [ ] Verify: ~--vsync false~ shows ~60~ fps and non-zero ~delta_time~; ~--fps 0~
+      reproduces the unbounded loop; a vsync'd run stays at monitor rate with no
+      extra sleep; ~--fps 144 --vsync false~ shows ~144~
+
+** The options are eventually exposed in a settings menu. Until that exists, the
+CLI flags are both the testing path and the only path. See Deferred "Settings
+Menu".**
+
+** Completed
+
+Finished work, condensed. Details live in the code and in Decisions.
+
+- **Seeding and level scaffolding.** Added ~.Level~ to ~SeedCategory~ and chained
+  the derivation from run seed to level seed to wave seed. The per-level wave
+  count and per-wave flee threshold are seeded draws; the threshold is
+  assign-and-display only. ~level_init~ owns the chain, and ~wave_count~ and
+  ~level_to_params~ are wired through. Generation and threshold draws are
+  wall-clock free.
+- **App shell.** Update and render are gated on ~world.state~; the menu enters
+  ~.Playing~, Esc pauses, and ~--debug~ skips the menu with the overlay on.
+  ~.Game_Over~ remains deliberately unreachable because there is no player death
+  condition.
+- **CLI and overlay.** ~parse_args~ was fixed and extended with ~--seed~,
+  ~--level~, and ~--help~; it runs before SDL initializes. The debug overlay now
+  shows the real wave count and ~threshold_permille~. Its per-frame cost is the
+  FPS texture rebuild, not the threshold line.
 
 ** Deferred
 
@@ -484,6 +435,24 @@ Species define what a bacterium is; behavior traits define what it does.
 - [ ] Node graph, persistence across levels, UI, stat application
 - [ ] Mount into the existing ~Level_Transition~ state
       - Not to be started until advancement, procgen, and formation gen are solid
+
+*** Settings Menu
+
+Player-facing home for the frame-pacing options. Deferred. Until it exists, the
+CLI flags are both the testing path and the only path.
+
+- [ ] Add a settings page for vsync and the FPS cap
+  - Decide whether it is a mode inside ~.Menu~ or a new ~GameState~
+  - ~.Menu~ currently renders only, and Enter is a bare state flip
+- [ ] Persist settings to disk and load them before the CLI is applied
+  - Precedence to decide: defaults < saved settings < CLI
+- [ ] Toggle vsync at runtime via ~sdl.RenderSetVSync~
+  - Returns failure on some backends; decide between a restart prompt and
+    recreating the renderer plus re-running ~assets_init~
+- [ ] Apply a new FPS target immediately
+  - Derive the frame duration from ~config.fps~ live; reset the deadline when the
+    target changes so the first frame after the change is not early or late
+- [ ] Keep ~--fps 0~ out of the menu; it is a testing value, not a play mode
 
 *** Boss Fights
 

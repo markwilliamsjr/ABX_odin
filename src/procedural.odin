@@ -58,11 +58,11 @@ EntryPathData :: struct {
 
 
 WaveParams :: struct {
-	total_enemies, max_simult_divers, species_unlocked, level: int,
-	speed_scalar, spawn_delay, dive_delay:                     f32,
-	path_type:                                                 PathType,
-	formation_params:                                          FormationParams,
-	diver_selection_rule:                                      DiverSelectionRule,
+	enemy_budget, max_simult_divers, species_unlocked, level: int,
+	speed_scalar, spawn_delay, dive_delay:                    f32,
+	path_type:                                                PathType,
+	formation_params:                                         FormationParams,
+	diver_selection_rule:                                     DiverSelectionRule,
 }
 
 BasicGenerationParams :: struct {
@@ -121,7 +121,7 @@ level_to_params :: proc(level: int) -> WaveParams {
 	block_number := (level - 1) / 5
 
 	wp := WaveParams {
-		total_enemies = 3 + (level * 2),
+		enemy_budget = 3 + (level * 2),
 		species_unlocked = (level - 1) / 5 + 1,
 		max_simult_divers = 1,
 		spawn_delay = 0.3,
