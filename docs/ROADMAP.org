@@ -13,21 +13,21 @@ Level advancement and transition, plus the minimum needed to observe it.
 
 *** Prerequisite: Seeding
 
-Complete except collision verification, which needs every wave initialized.
+Complete except collision verification. Every wave is initialized now, so the
+per-wave half is observable; the check itself still needs to be run and recorded.
 Kept for the seed-assignment reference; the finished items are summarized under
 Completed. The next start point is Level and Wave Lifecycle.
 
 - [ ] Verify no seed collision across levels
-  - Blocked until ~level_init~ initializes every drawn wave; only wave 0 exists
-  - The level half is now testable: ~--level~ reaches ~level_init~, so levels
-    generate different ~level_seed~ values. What is still missing is more than one
-    wave per level to compare
+  - Unblocked 2026-10-26: ~level_init~ initializes every drawn wave, so a level's
+    whole set of wave seeds can be logged and compared
+  - The level half is testable via ~--level~: each level derives a different
+    ~level_seed~
 
 ** Verifiable without playing the game — log the derived seeds and confirm
 different levels and waves produce different numbers. The hardcoded ~0~ is gone
-and the hardcoded level number is gone: ~--level~ now reaches ~level_init~, so
-wave seeds differ across levels. Only the per-wave half is still unobservable,
-because ~level_init~ initializes just ~wave[0]~.**
+and the hardcoded level number is gone: ~--level~ now reaches ~level_init~, and
+both halves of the chain are observable.**
 
 ** Seed assignments as they stand (~src/level.odin:107-118~, ~:62~)
 
@@ -125,7 +125,9 @@ block.**
 
 ** Wave count is ~wave_count_picker~ (~src/level.odin:216-227~):
 ~min = 1 + block*2~, ~max = min + 3~, both clamped to ~MAX_WAVES~, drawn with
-~rand.int_range~ (inclusive). Blocks are 5 levels, matching ~level_to_params~.
+~rand.int_range~, which is *exclusive* at the upper bound. The table below is the
+intended range, not what the code currently draws. See "Parked: Range Semantics
+and Unit Tests". Blocks are 5 levels, matching ~level_to_params~.
 
 | block | levels | range  |
 |-------+--------+--------|
@@ -138,43 +140,89 @@ block.**
 
 Block 0 now draws ~[1, min(level, 4)]~ rather than ~1–4~: level 1 is always one
 wave, level 2 one or two, level 3 one to three, levels 4–5 one to four. This is the
-early-level determinism ramp; level 1's draw still consumes its seed triple even
-though the range has collapsed. Adjacent blocks overlap by two values, so escalation
-is non-decreasing rather than strictly increasing. The range is pinned at
-~MAX_WAVES~ from block 4: the draw still consumes its seed triple but always
-returns 10. ~MAX_WAVES~ was left at 10 to be judged in play; raising it widens the
-saturated tail.**
+early-level determinism ramp. A collapsed range returns its single value without
+drawing, because ~rand.int_range~ panics unless ~lo < hi~; the triple still belongs
+to that decision, and every draw site owns a throwaway RNG, so skipping the draw
+affects nothing downstream. Adjacent blocks overlap by two values, so escalation is
+non-decreasing rather than strictly increasing. The range is pinned at ~MAX_WAVES~
+from block 4 and returns 10 the same way. ~MAX_WAVES~ was left at 10 to be judged
+in play; raising it widens the saturated tail.**
 
 *** Level and Wave Lifecycle  ← START HERE
 
-The next item is the one that makes the seed chain observable: initializing every
-drawn wave.
+Units A–D are implemented and the build is clean: the rename, the all-waves loop,
+the budget split with floor and jitter ramp, and the pinned entry for levels 1–2.
+The overlay work moves to Clay (see Deferred "Clay UI Foundation"); wave
+advancement and completion remain.
 
-- [ ] Add ~wave_index~ to ~Level~ (position within the current level)
+- [x] Add ~wave_index~ to ~Level~ (position within the current level)
   - Wave index starts at 0. Level number is 1-based; do not mix the two
-- [ ] Initialize all drawn waves in ~level_init~
+  - ~is_active~ was removed at the same time: ~wave_index~ is the only authority
+    for which wave is running
+- [x] Initialize all drawn waves in ~level_init~
   - Design settled 2026-10-24: ~3 + level*2~ is a level budget split across waves,
     not a per-wave count. See Decisions "Enemy counts" and "Early-level
     determinism"
-  - [ ] Rename ~WaveParams.total_enemies~ → ~enemy_budget~ and
+  - [x] Rename ~WaveParams.total_enemies~ → ~enemy_budget~ and
         ~Wave.total_enemies~ → ~enemy_count~; pass ~enemy_count~ explicitly into
         ~wave_init~
-  - [ ] Loop every drawn wave, deriving ~.Wave, i~, with wave 0 coming out of the
+  - [x] Loop every drawn wave, deriving ~.Wave, i~, with wave 0 coming out of the
         same loop so there is one seed path
-  - [ ] Split the budget: base share plus remainder to the earliest waves, floor 3,
+  - [x] Split the budget: base share plus remainder to the earliest waves, floor 3,
         floor wins
-  - [ ] Apply ±1 per-wave count jitter from
+  - [x] Apply ±1 per-wave count jitter from
         ~derive_seed(wave_seed, .Wave, 0)~, band 0 in block 0
-  - [ ] Tighten block 0's wave-count range to ~[1, min(level, 4)]~
-  - [ ] Pin entry to top-center for levels 1–2 by passing a one-element
-        ~available_points~ slice to ~generate_entry_points~
-  - [ ] Show the active wave's ~enemy_count~ in the overlay, alongside
-        ~wave_index~
+        - Collapsed ranges (band 0) return without drawing; see the wave-count
+          note under Prerequisite: Seeding
+        - **Known defect:** the draw is ~int_range(-band, band)~, so block 1+
+          yields ~{-1, 0}~, never ~+1~. See the parked item below.
+  - [x] Tighten block 0's wave-count range to ~[1, min(level, 4)]~
   - After the rename, ~level_to_params~ carries the budget and shared wave params,
     while each wave's count arrives explicitly
+- [x] Pin entry to top-center for levels 1–2 by passing a one-element
+      ~available_points~ slice to ~generate_entry_points~
+- [ ] Show the active wave's ~enemy_count~ in the overlay, alongside ~wave_index~
+  - Deferred to Clay; see Deferred "Clay UI Foundation"
 - [ ] Advance ~wave_index~ when the active wave resolves
 - [ ] Mark the level complete when ~wave_index~ exceeds the level's wave count
 - [ ] Show ~wave_index~ in the overlay once ~Level~ has the field
+  - Deferred to Clay; see Deferred "Clay UI Foundation"
+
+*** Parked: Range Semantics and Unit Tests
+
+Deliberately parked on 2026-10-26. Neither item blocks the remaining slice
+implementation, but both decide what "verified" can mean for it.
+
+**** ~int_range~ upper bound
+
+~rand.int_range~ is ~[lo, hi)~, not inclusive (~core/math/rand/rand.odin:863~).
+The wave-count derivation above and the tables written for it assume ~[lo, hi]~.
+
+- Observed today: block 0 gives L1 = 1, L2 = 1, L3 = 1–2, L4–5 = 1–3; block 1
+  gives 3–5; block 2 gives 5–7; block 3 gives 7–9; block 4 gives 9 only.
+- Count jitter draws ~int_range(-1, 1)~, so block 1+ produces ~{-1, 0}~ and never
+  ~+1~ — the band is one-sided, not ±1.
+- Undecided: treat the documented ranges as inclusive and pass ~hi + 1~ (and
+  ~band + 1~ for jitter), or accept exclusive ranges and rewrite the tables. The
+  first matches every stated intent, but it is a code decision.
+- Do not encode the current behaviour in tests before this is settled.
+
+**** Unit tests
+
+No tests exist. ~@(test)~ procedures in ~package main~ work alongside ~main~;
+files named ~*_test.odin~ are excluded from normal builds; ~odin test src~ builds
+the package cleanly today.
+
+- [ ] Decide the seam: drive ~level_init~ end to end, or extract the budget split
+      and jitter into a pure helper first
+- [ ] Cover ~derive_seed~, ~wave_count_picker~, ~threshold_picker~, and the budget
+      split and jitter properties
+- [ ] Cover ~level_init~ smoke: level 1 shape, sum/floor rules, same-seed replay,
+      different seeds differing
+- [ ] Use a local RNG in every test; the test runner seeds the global generator
+      randomly
+- [ ] Remove the debug ~fmt.printfln~ lines in ~level_init~ first, or every test
+      floods the output
 
 *** Wave Resolution
 
@@ -189,7 +237,7 @@ finished.
   - ~threshold_crossed~ already exists on ~Wave~ and is unused, so the flag has a
     home
 - [ ] Track per-wave resolved count, incrementing on death or flee
-- [ ] Complete the wave when resolved == ~spawn_count~ (not ~total_enemies~ —
+- [ ] Complete the wave when resolved == ~spawn_count~ (not ~enemy_count~ —
       spawning may not be finished)
 - [ ] Resolve the three cases explicitly: dead (resolved), fled (resolved and
       scheduled to return), still alive (unresolved)
@@ -205,8 +253,8 @@ The difficulty-escalation engine, not an escape valve.
 - [ ] Flee remaining bacteria when the fraction *destroyed* reaches the rolled
       threshold; resolve the wave at that moment
   - The threshold is a per-mille fraction destroyed, not a fraction remaining —
-    see Threshold design. At level 15 a wave resolves with roughly 13 of 33
-    bacteria still standing, so "remaining" is the larger number here
+    see Threshold design. At level 15 a wave resolves around 59% destroyed, so a
+    five-bacterium wave flees with roughly two still standing
 - [ ] On flee, move bacteria into a pending roster on ~World~, not ~Level~
       - The roster survives level transitions; ~Level_Transition~ must not clear it
 - [ ] Queue each fleeing bacterium for the *next wave*, positionally — flee again
@@ -286,6 +334,8 @@ magnitudes until they settle.**
 - [ ] Early levels are seed-insensitive: level 1 is always one wave of five with a
       top-center entry across many seeds
 - [ ] Wave-count ranges widen with level as documented
+  - Cannot pass until the parked ~int_range~ semantics item is settled: current
+    draws are one short of the documented ranges
 - [ ] Flee and return do not perturb determinism
 
 ** Verification is last by sequence, not by importance. Nothing in this slice is confirmed until it passes.
@@ -313,9 +363,16 @@ Blockers, not tasks. Each must be decided before the work that depends on it.
 
 - Enemy count model — `3 + level*2` is a level budget split across the drawn
   waves, with a floor of 3, and the floor wins. See Decisions "Enemy counts".
+  Implemented 2026-10-26.
 - Early-level variance — block 0's wave count draws `[1, min(level, 4)]`, count
   jitter is 0 in block 0, and entries are pinned to top-center for levels 1–2.
-  See Decisions "Early-level determinism".
+  See Decisions "Early-level determinism". All three are implemented; early-level
+  entry still needs runtime confirmation.
+- Degenerate ranges — `rand.int_range` panics unless `lo < hi`, so the block-0
+  level-1 case, the band-0 jitter, and the `MAX_WAVES` saturation all return
+  their single value without drawing. This corrects the earlier claim that such
+  draws still consume their seed triple. Skipping is harmless because every draw
+  site owns a throwaway RNG.
 - Jitter band — ±3 was chosen while per-wave counts were assumed to be 5–43; the
   budget model made shares 3–6, so the band is now ±1.
 - Seed count — the per-wave count jitter adds a seventh distinct triple.
@@ -327,8 +384,8 @@ Blockers, not tasks. Each must be decided before the work that depends on it.
   membership design decision inside a bookkeeping task.
 - Flee threshold direction — fraction *destroyed*, held as a per-mille ~int~.
   The ambiguity was the whole problem: read as fraction remaining, the old ~0.8~
-  would mean "flee while 80% are still alive". ~WaveParams.threshold~ is to be
-  removed, so the seed becomes the only source. See Threshold design under
+  would mean "flee while 80% are still alive". ~WaveParams.threshold~ has been
+  removed, so the seed is the only source. See Threshold design under
   Prerequisite: Seeding.
 - Threshold curve — half cycle of a raised cosine over 20 levels, per-wave ±50
   spread, drawn independently per wave. Chosen so nothing flees through level 4
@@ -410,10 +467,86 @@ Finished work, condensed. Details live in the code and in Decisions.
   ~--level~, and ~--help~; it runs before SDL initializes. The debug overlay now
   shows the real wave count and ~threshold_permille~. Its per-frame cost is the
   FPS texture rebuild, not the threshold line.
+- **Wave initialization and enemy counts.** ~level_init~ now initializes every
+  drawn wave from its own ~(.Wave, i)~ seed. ~3 + level*2~ is a level budget split
+  across waves — floor 3, floor wins — with ±1 per-wave jitter, 0 in block 0.
+  Block 0's wave count draws ~[1, min(level, 4)]~, so level 1 is always one wave.
+  Entry pinning and the ~wave_index~ field are in; wave advancement and the Clay
+  overlay remain.
 
 ** Deferred
 
 Deliberately out of scope. Not to be started until the current slice lands.
+
+*** Clay UI Foundation
+
+Clay (~https://github.com/nicbarker/clay~) is the UI layout layer for the debug
+overlay, menu, settings, and eventually the skill tree. It handles layout only:
+the project still measures text and draws every render command.
+
+- [ ] Vendor the official Odin bindings at a pinned tag (~v0.14~) into
+      ~src/clay-odin/~: ~clay.h~, ~clay.odin~, ~LICENSE~, and a README recording
+      the upstream URL and tag
+  - ~clay.h~ and ~clay.odin~ must come from the same tag; the binding is
+    generated against that header's ABI
+- [ ] Add ~scripts/build-clay.sh~ to compile the header locally
+  - ~cc -x c -DCLAY_IMPLEMENTATION -O2 -fPIC -c clay.h~, then ~ar rcs~ into
+    ~src/clay-odin/linux/clay.a~, the path the binding's ~foreign import~
+    expects
+  - Linux only for now; add per-OS branches when a release matrix exists
+- [ ] Add a ~Makefile~ that owns staleness and calls the script
+  - ~$(CLAY_LIB)~ depends on ~clay.h~ and the script
+  - ~make run ARGS="--debug"~, ~make check~, ~make test~
+  - ~make clay~ forces a rebuild; ~make clean~ removes generated artifacts only
+- [ ] Ignore generated artifacts: ~build/~ and
+      ~src/clay-odin/linux/clay.a~
+- [ ] Import ~clay "./clay-odin"~ from a new ~src/ui.odin~
+  - ~UI~ struct holds the Clay arena, layout dimensions, font, and per-frame
+    scratch storage
+  - ~ui_init~ / ~ui_shutdown~ run after ~assets_init~ and before ~ttf.Quit~
+  - ~measure_text~ uses ~TTF_SizeUTF8~; Clay string slices are not
+    null-terminated
+  - ~ui_render~ interprets ~.Rectangle~, ~.Text~, ~.ScissorStart/End~ and
+    ~.Border~; skip ~.Image~, ~.Custom~ and ~.OverlayColor~ until needed
+- [ ] Port the debug overlay, then the menu, then settings
+  - Overlay carries the pending ~wave_index~ and ~enemy_count~ lines
+  - Settings needs pointer state: ~clay.SetPointerState~ plus SDL mouse input
+- [ ] Skill tree UI later, once advancement and procgen are solid
+
+** Constraints that shape the port:
+
+- One font at size 16 today. ~measure_text~ can ignore ~fontId~; a font table
+  comes when the menu needs multiple sizes.
+- Corner radius 0 initially. SDL2 cannot draw rounded rectangles directly;
+  add ~RenderGeometry~ rounding only if it becomes visually important.
+- Use a UI-owned scratch arena reset each frame. The main loop never resets
+  ~context.temp_allocator~, so per-frame conversion there would leak.
+- Labels built with ~fmt.bprintf~ must outlive ~EndLayout~ and the render pass.
+  Keep their buffers in the UI frame scratch or build and render in one scope.
+
+*** Cross-Platform Release
+
+Development stays Linux-only. Releases are built natively on each OS rather than
+cross-compiled from Linux.
+
+- [ ] Release CI matrix: Ubuntu, Windows, macOS Intel, macOS Apple Silicon
+  - Each job builds Clay for its own host via the script, then runs
+    ~odin build -target:...~
+  - Cross-compiling from Linux is rejected: macOS needs the SDK, SDL needs
+    target import libraries, and neither build can be smoke-tested remotely
+- [ ] Provision SDL2, SDL2_ttf and SDL2_image per runner
+- [ ] Package runtime dependencies per platform
+  - Windows: ship the SDL DLLs beside the executable
+  - macOS: app bundle with dylibs and the correct rpath; decide between two
+    architecture builds and a universal binary
+  - Linux: decide between requiring system SDL and bundling the libraries
+- [ ] Resolve assets relative to the executable (~SDL_GetBasePath~) rather than
+      the working directory
+  - Current ~"assets/..."~ paths break under shortcuts, app bundles, and Steam
+    launch options
+- [ ] Extend ~scripts/build-clay.sh~ with per-OS branches and archive formats
+      (~windows/clay.lib~ via ~llvm-lib~, ~macos*/clay.a~) only when the matrix
+      exists
 
 *** Enemy Behavior Architecture
 

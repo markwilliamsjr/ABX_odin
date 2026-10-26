@@ -133,12 +133,13 @@ debug_render :: proc(debug: ^Debug, assets: ^Assets, world: ^World, renderer: ^s
 	sdl.RenderCopy(renderer, debug.wave_count_texture, nil, &debug.wave_count_rect)
 
 	// Draw Threshold
-	if debug.prev_threshold_permille != world.level.wave[0].threshold_permille ||
+	if debug.prev_threshold_permille !=
+		   world.level.wave[world.level.wave_index].threshold_permille ||
 	   debug.threshold_permille_texture == nil {
 		threshold_permille_text := strings.clone_to_cstring(
 			fmt.aprintf(
 				"Threshold: %d",
-				world.level.wave[0].threshold_permille,
+				world.level.wave[world.level.wave_index].threshold_permille,
 				allocator = context.temp_allocator,
 			),
 		)
@@ -151,7 +152,7 @@ debug_render :: proc(debug: ^Debug, assets: ^Assets, world: ^World, renderer: ^s
 			15,
 			15 + debug.fps_rect.h + debug.game_state_rect.h + debug.wave_count_rect.h,
 		)
-		debug.prev_threshold_permille = world.level.wave[0].threshold_permille
+		debug.prev_threshold_permille = world.level.wave[world.level.wave_index].threshold_permille
 	}
 	sdl.RenderCopy(renderer, debug.threshold_permille_texture, nil, &debug.threshold_permille_rect)
 }

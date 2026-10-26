@@ -159,8 +159,11 @@ the generator would add a second code path for the same outcome.
   formation, same top-center entry. Its `threshold_permille` still varies over
   900–1000, but that is unobservable: a five-enemy wave crosses every threshold in
   that band only at full destruction.
-- The seed graph is unchanged. Degenerate draws still consume their triples,
-  following the `MAX_WAVES` saturation precedent.
+- Degenerate ranges return their single value without drawing. `rand.int_range`
+  panics unless `lo < hi`, so the block-0 level-1 case, the band-0 jitter, and the
+  `MAX_WAVES` saturation are all guarded. This supersedes the earlier statement
+  that such draws still consume their triple: skipping is harmless because every
+  draw site owns a throwaway RNG, and the triple still belongs to that decision.
 - The floor/budget overrun is confined to levels 4, 6 and 7.
 - Level 5 to 6 has a structural discontinuity: the maximum rises 4 to 6 while the
   minimum jumps 1 to 3. It is inherited from block-based ranges, not introduced by

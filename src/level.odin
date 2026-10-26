@@ -40,7 +40,7 @@ Wave :: struct {
 	spawn_delay, spawn_timer, dive_delay, dive_timer, speed_scalar:       f32,
 	path:                                                                 PathType,
 	enemy_indices:                                                        [MAX_ENEMIES]int,
-	is_active, formation_complete, threshold_crossed:                     bool,
+	formation_complete, threshold_crossed:                                bool,
 	formation_complete_time:                                              u64,
 	control_points:                                                       [3]sdl.FPoint,
 	formation_positions:                                                  [MAX_REGIONS][MAX_ENEMIES]sdl.FPoint,
@@ -51,10 +51,10 @@ Wave :: struct {
 }
 
 Level :: struct {
-	wave:                     [MAX_WAVES]Wave,
-	wave_count, level_number: int,
-	level_end:                bool,
-	end_chance:               f32,
+	wave:                                 [MAX_WAVES]Wave,
+	wave_count, level_number, wave_index: int,
+	level_end:                            bool,
+	end_chance:                           f32,
 }
 
 // ---- Init ----
@@ -71,9 +71,18 @@ wave_init :: proc(wp: ^WaveParams, wave: ^Wave, wave_seed: u64, enemy_count, lev
 
 	region_size, region_count := compute_formation_bounds(wp)
 
-	entry_rules := EntryRules {
-		available_points = ENTRY_POINTS[:],
-		count            = region_count,
+	entry_rules: EntryRules
+
+	if level <= 2 {
+		entry_rules = EntryRules {
+			available_points = ENTRY_POINTS[2:3],
+			count            = region_count,
+		}
+	} else {
+		entry_rules = EntryRules {
+			available_points = ENTRY_POINTS[:],
+			count            = region_count,
+		}
 	}
 
 	entry_point_result, entry_ok := generate_entry_points(entry_rng, entry_rules)
@@ -97,7 +106,6 @@ wave_init :: proc(wp: ^WaveParams, wave: ^Wave, wave_seed: u64, enemy_count, lev
 	wave.path = wp.path_type
 	wave.speed_scalar = wp.speed_scalar
 	wave.spawn_delay = wp.spawn_delay
-	wave.is_active = true
 	wave.enemy_count = enemy_count
 	wave.max_simult_divers = wp.max_simult_divers
 	wave.diver_selection_rule = wp.diver_selection_rule
@@ -111,16 +119,17 @@ level_init :: proc(bacteria: ^Bacteria, level: ^Level, master_seed: u64, level_n
 	wave_rng_state := rand.create(derive_seed(level_seed, .Level, 0))
 	wave_rng := runtime.default_random_generator(&wave_rng_state)
 	level.wave_count = wave_count_picker(level.level_number, wave_rng)
+	level.wave_index = 0
 
 	base := level_params.enemy_budget / level.wave_count
 	extra := level_params.enemy_budget % level.wave_count
+	block_number := (level.level_number - 1) / 5
 
 	for i in 0 ..< level.wave_count {
 		share := base + (1 if i < extra else 0)
 		share = max(share, WAVE_ENEMY_FLOOR)
 
 		band: int
-		block_number := (level.level_number - 1) / 5
 		if block_number == 0 {
 			band = 0
 		} else {
@@ -132,19 +141,15 @@ level_init :: proc(bacteria: ^Bacteria, level: ^Level, master_seed: u64, level_n
 		jitter_rng_state := rand.create(derive_seed(wave_seed, .Wave, 0))
 		jitter_rng := runtime.default_random_generator(&jitter_rng_state)
 		jitter: int
-		if -band == band {
-			jitter = -band
+		if band == 0 {
+			jitter = 0
 		} else {
-
 			jitter = rand.int_range(-band, band, jitter_rng)
 		}
 
 		share = clamp(share + jitter, WAVE_ENEMY_FLOOR, MAX_ENEMIES)
 
 		wave_init(&level_params, &level.wave[i], wave_seed, share, level_number)
-		fmt.printfln("%v", i)
-		fmt.printfln("%v", share)
-		fmt.printfln("%v", level_params.enemy_budget)
 	}
 
 }
