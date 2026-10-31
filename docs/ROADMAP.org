@@ -2,605 +2,215 @@
 
 * ABX! Roadmap
 
-Organized by category. Ordered by dependency within each category.
+Remaining work only, ordered by dependency within each phase. A phase starts
+when the one before it is verified.
 
-Categories marked [[file:docs/DECISIONS.md][Decisions]] reference the decision
-that established the work.
+- Why a design is the way it is: [[file:DECISIONS.md][DECISIONS.md]]
+- Intended design: [[file:ARCHITECTURE.md][ARCHITECTURE.md]]
+- What exists today: [[file:PROJECT.md][PROJECT.md]]
+- Current working context: [[file:SESSION.md][SESSION.md]]
 
-** Current Slice
+** Before starting: open decisions
 
-Level advancement and transition, plus the minimum needed to observe it.
+Decide each before writing the code that depends on it.
 
-*** Prerequisite: Seeding
+- [ ] **Range semantics** — treat ~rand.int_range~ as inclusive (pass ~hi + 1~)
+      or exclusive (rewrite the documented ranges)? Blocks 1.1 and the
+      wave-count verification.
+- [ ] **Does the flee threshold scale with buff count?** Blocks 1.3.
+- [ ] **Frenzied stacking** — additive-with-cap or free multiplication? Blocks
+      buff tuning, not implementation.
+- [ ] **Boss shape, roster entry, meter interaction** — deferred with Phase 8,
+      but decide before tuning difficulty.
+- [ ] **Settings precedence and runtime vsync fallback** — blocks Phase 5.
 
-Complete except collision verification. Every wave is initialized now, so the
-per-wave half is observable; the check itself still needs to be run and recorded.
-Kept for the seed-assignment reference; the finished items are summarized under
-Completed. The next start point is Level and Wave Lifecycle.
+** Phase 1 — Level and wave lifecycle (current)
 
-- [ ] Verify no seed collision across levels
-  - Unblocked 2026-10-26: ~level_init~ initializes every drawn wave, so a level's
-    whole set of wave seeds can be logged and compared
-  - The level half is testable via ~--level~: each level derives a different
-    ~level_seed~
+Finish level advancement and transition, plus the minimum needed to observe it.
 
-** Verifiable without playing the game — log the derived seeds and confirm
-different levels and waves produce different numbers. The hardcoded ~0~ is gone
-and the hardcoded level number is gone: ~--level~ now reaches ~level_init~, and
-both halves of the chain are observable.**
+*** 1.1 Settle range semantics
 
-** Seed assignments as they stand (~src/level.odin:107-118~, ~:62~)
+- [ ] Choose inclusive or exclusive ~rand.int_range~ and apply it to
+      ~wave_count_picker~ and the count jitter.
+- [ ] Update the documented wave-count ranges to match the decision.
 
-#+begin_example
-master_seed
-  └─ .Level, level_number → level_seed        (level_init)
-       ├─ .Wave, i        → wave_seed         (level_init, i = 0..wave_count-1)
-       │    ├─ .Entry, 0 → entry points      (wave_init)
-       │    ├─ .Level, 0 → flee threshold    (wave_init)
-       │    └─ .Wave, 0  → count jitter      (wave_init)
-       └─ .Level, 0       → wave-count draw   (level_init)
-#+end_example
+*** 1.2 Wave membership and resolution
 
-Seven distinct ~(parent, category, number)~ triples, no reuse. The count jitter
-adds ~(wave_seed, .Wave, 0)~ — the same category as the wave seed's own link, but
-under a different parent, which the chaining rule permits. Three triples reuse the
-~.Level~ category with a small number below the root derivation, which the Decision
-sanctions.
+Ownership, counters, crossing detection, and advancement. The flee response is
+1.3. Full detail: [[file:DECISIONS.md::Wave resolution and membership][Wave resolution and membership]].
 
-** Threshold design (implemented)
+- [ ] Give each wave a unique ID and each bacterium an owner; clear ownership
+      when it leaves play.
+- [ ] Replace the formation, diver-count, and diver-selection scans with owner
+      scans; delete ~enemy_indices~.
+- [ ] Add ~destroyed_count~ and ~fled_count~ to ~Wave~; derive ~resolved~ as
+      their sum.
+- [ ] Reset counters, timers, flags, and level state in ~wave_init~ and
+      ~level_init~.
+- [ ] Attribute deaths to the owning wave at health zero.
+- [ ] Do not count a failed spawn; retry it, and guard the formation-shortfall
+      case.
+- [ ] Once spawning completes, apply
+      ~destroyed_count * 1000 >= spawn_count * threshold_permille~ and set
+      ~threshold_crossed~ once.
+- [ ] Resolve dead, fled, and still-alive explicitly; complete the wave when
+      ~resolved == spawn_count~.
+- [ ] Advance ~wave_index~ once per completed wave; set ~Level.level_end~ when
+      it reaches the level's wave count.
+- [ ] Add temporary wave logs: init, crossing, resolution, advancement, level
+      end.
 
-The flee threshold is a per-wave seeded draw from ~derive_seed(wave_seed, .Level, 0)~
-— one independent draw per wave, so waves within a level differ from each other
-rather than sharing a level-wide value.
+*** 1.3 Fleeing and returning
 
-- **Direction** — fraction *destroyed*. The crossing test is
-  ~destroyed * 1000 >= spawn_count * threshold_permille~, all integer: no
-  division, no float compare, no boundary rounding.
-- **Representation** — per-mille ~int~, not ~f32~. Read as fraction remaining the
-  old ~0.8~ would have meant "flee while 80% alive", inverting the difficulty.
-  Per-mille also makes the value diffable in logs, which is how the seeding work
-  gets verified.
-- **Curve** — a half cycle of a raised cosine, crest to trough:
-  ~t = clamp((level-1)/20, 0, 1)~, ~base = 500 + 225 * (1 + cos(pi*t))~.
-  Flat at both ends, steepest mid-curve.
-- **Per-wave spread** — ~±50~ around the base. Keeps waves within a level
-  distinct without making variance a second difficulty knob. Two separate bounds
-  do different jobs: 500 is the chosen floor, and the 1000 upper bound is what
-  keeps the value crossable.
-  - The clamp is applied *after* the spread, so an upper bound below 1000
-    truncates the positive half of the draw at early levels — the coin flip goes
-    one-sided until ~base~ drops clear of it. ~base + spread~ peaks at exactly
-    1000 at level 1, so the bound is exactly sufficient and the spread stays
-    symmetric everywhere.
-
-** Deliberately provisional: the 500 floor and the /20 span were picked for shape,
-not for balance, and are expected to be tuned in play.**
-
-** Superseded count model (2026-10-24): the ~enemies~ and ~kills to cross~ columns
-below assume ~3 + level*2~ enemies in every wave. Enemy counts are now a level
-budget split across the level's waves, so per-wave sizes are roughly 3–6 rather
-than 5–43. The curve and its fraction-destroyed semantics are unchanged; the
-absolute columns need re-derivation and are kept only as the record of the curve's
-shape. See Decisions "Enemy counts".**
-
-| level | base | enemies (~3 + level*2~) | kills to cross | flee |
-|-------+------+-------------------------+-----------------+------|
-|     1 |  950.0 |                     5 |               5 | no  |
-|     2 |  947.2 |                     7 |               7 | no  |
-|     3 |  939.0 |                     9 |               9 | no  |
-|     4 |  925.5 |                    11 |              11 | no  |
-|     5 |  907.0 |                    13 |              12 | 1    |
-|     6 |  884.1 |                    15 |              14 | 1    |
-|    10 |  760.2 |                    23 |              18 | 5    |
-|    15 |  592.7 |                    33 |              20 | 13   |
-|    20 |  502.8 |                    43 |              22 | 21   |
-|   21+ |  500.0 |                    45+|               — | ~half|
-
-** Under the superseded per-wave model, nothing fled through level 4 and one wave
-fled at level 5; the "12 or 13 kills" figures below the table are per-wave and no
-longer apply. The fraction-destroyed curve still means early waves do not flee, but
-under the budget split a level-5 wave holds 3–4 bacteria, so the crossing arithmetic
-must be re-derived.**
-
-** Recomputed after the amplitude was corrected from 255 to 225. An earlier
-version of this table was written against ~600 + 255 * (1 + cos)~, whose crest
-reached 1110 — a value no wave could ever cross, which silently disabled fleeing
-for the first several levels. The corrected numbers are what ~threshold_picker~
-now produces; the code is right and this table was catching up.**
-
-** Two consequences of the budget split, replacing the per-wave reading:
-
-- Per-wave size stays roughly 3–6, so a wave crosses its threshold after only a
-  few kills (at 500 permille, three of five). Escalation within a level comes from
-  the number of waves, not from each wave growing.
-- The roster fills faster, and the roster bound drops the *oldest* entry — so the
-  cap discards precisely the most-escaped, most-buffed bacteria. Worth revisiting
-  when the roster lands; it is not tunable away.
-
-** Index bases: level number is 1-based, wave index is 0-based. Level numbers are
-player-facing and match ~level_to_params~, which is written 1-based throughout
-(~src/procedural.odin:120-121~). Wave indices are internal array offsets and match
-~level.wave[i]~ directly. Mixing these is how a level silently wraps to the wrong
-block.**
-
-** Wave count is ~wave_count_picker~ (~src/level.odin:216-227~):
-~min = 1 + block*2~, ~max = min + 3~, both clamped to ~MAX_WAVES~, drawn with
-~rand.int_range~, which is *exclusive* at the upper bound. The table below is the
-intended range, not what the code currently draws. See "Parked: Range Semantics
-and Unit Tests". Blocks are 5 levels, matching ~level_to_params~.
-
-| block | levels | range  |
-|-------+--------+--------|
-|     0 |    1–5 |    1–4 |
-|     1 |   6–10 |    3–6 |
-|     2 |  11–15 |    5–8 |
-|     3 |  16–20 |    7–10 |
-|     4 |  21–25 |   9–10 |
-|    5+ |    26+ |      10 |
-
-Block 0 now draws ~[1, min(level, 4)]~ rather than ~1–4~: level 1 is always one
-wave, level 2 one or two, level 3 one to three, levels 4–5 one to four. This is the
-early-level determinism ramp. A collapsed range returns its single value without
-drawing, because ~rand.int_range~ panics unless ~lo < hi~; the triple still belongs
-to that decision, and every draw site owns a throwaway RNG, so skipping the draw
-affects nothing downstream. Adjacent blocks overlap by two values, so escalation is
-non-decreasing rather than strictly increasing. The range is pinned at ~MAX_WAVES~
-from block 4 and returns 10 the same way. ~MAX_WAVES~ was left at 10 to be judged
-in play; raising it widens the saturated tail.**
-
-*** Level and Wave Lifecycle  ← START HERE
-
-Units A–D are implemented and the build is clean: the rename, the all-waves loop,
-the budget split with floor and jitter ramp, and the pinned entry for levels 1–2.
-The overlay work moves to Clay (see Deferred "Clay UI Foundation"); wave
-advancement and completion remain.
-
-- [x] Add ~wave_index~ to ~Level~ (position within the current level)
-  - Wave index starts at 0. Level number is 1-based; do not mix the two
-  - ~is_active~ was removed at the same time: ~wave_index~ is the only authority
-    for which wave is running
-- [x] Initialize all drawn waves in ~level_init~
-  - Design settled 2026-10-24: ~3 + level*2~ is a level budget split across waves,
-    not a per-wave count. See Decisions "Enemy counts" and "Early-level
-    determinism"
-  - [x] Rename ~WaveParams.total_enemies~ → ~enemy_budget~ and
-        ~Wave.total_enemies~ → ~enemy_count~; pass ~enemy_count~ explicitly into
-        ~wave_init~
-  - [x] Loop every drawn wave, deriving ~.Wave, i~, with wave 0 coming out of the
-        same loop so there is one seed path
-  - [x] Split the budget: base share plus remainder to the earliest waves, floor 3,
-        floor wins
-  - [x] Apply ±1 per-wave count jitter from
-        ~derive_seed(wave_seed, .Wave, 0)~, band 0 in block 0
-        - Collapsed ranges (band 0) return without drawing; see the wave-count
-          note under Prerequisite: Seeding
-        - **Known defect:** the draw is ~int_range(-band, band)~, so block 1+
-          yields ~{-1, 0}~, never ~+1~. See the parked item below.
-  - [x] Tighten block 0's wave-count range to ~[1, min(level, 4)]~
-  - After the rename, ~level_to_params~ carries the budget and shared wave params,
-    while each wave's count arrives explicitly
-- [x] Pin entry to top-center for levels 1–2 by passing a one-element
-      ~available_points~ slice to ~generate_entry_points~
-- [ ] Show the active wave's ~enemy_count~ in the overlay, alongside ~wave_index~
-  - Deferred to Clay; see Deferred "Clay UI Foundation"
-- [ ] Advance ~wave_index~ when the active wave resolves
-- [ ] Mark the level complete when ~wave_index~ exceeds the level's wave count
-- [ ] Show ~wave_index~ in the overlay once ~Level~ has the field
-  - Deferred to Clay; see Deferred "Clay UI Foundation"
-
-*** Parked: Range Semantics and Unit Tests
-
-Deliberately parked on 2026-10-26. Neither item blocks the remaining slice
-implementation, but both decide what "verified" can mean for it.
-
-**** ~int_range~ upper bound
-
-~rand.int_range~ is ~[lo, hi)~, not inclusive (~core/math/rand/rand.odin:863~).
-The wave-count derivation above and the tables written for it assume ~[lo, hi]~.
-
-- Observed today: block 0 gives L1 = 1, L2 = 1, L3 = 1–2, L4–5 = 1–3; block 1
-  gives 3–5; block 2 gives 5–7; block 3 gives 7–9; block 4 gives 9 only.
-- Count jitter draws ~int_range(-1, 1)~, so block 1+ produces ~{-1, 0}~ and never
-  ~+1~ — the band is one-sided, not ±1.
-- Undecided: treat the documented ranges as inclusive and pass ~hi + 1~ (and
-  ~band + 1~ for jitter), or accept exclusive ranges and rewrite the tables. The
-  first matches every stated intent, but it is a code decision.
-- Do not encode the current behaviour in tests before this is settled.
-
-**** Unit tests
-
-No tests exist. ~@(test)~ procedures in ~package main~ work alongside ~main~;
-files named ~*_test.odin~ are excluded from normal builds; ~odin test src~ builds
-the package cleanly today.
-
-- [ ] Decide the seam: drive ~level_init~ end to end, or extract the budget split
-      and jitter into a pure helper first
-- [ ] Cover ~derive_seed~, ~wave_count_picker~, ~threshold_picker~, and the budget
-      split and jitter properties
-- [ ] Cover ~level_init~ smoke: level 1 shape, sum/floor rules, same-seed replay,
-      different seeds differing
-- [ ] Use a local RNG in every test; the test runner seeds the global generator
-      randomly
-- [ ] Remove the debug ~fmt.printfln~ lines in ~level_init~ first, or every test
-      floods the output
-
-*** Wave Resolution
-
-The actual core of the slice. Nothing currently detects that a wave has
-finished.
-
-- [ ] Add a flee threshold to ~Wave~, rolled once at ~wave_init~
-  - The roll and the assignment land first, under Prerequisite: Seeding; what
-    remains here is the comparison that consumes it
-- [ ] Add the integer crossing test ~destroyed * 1000 >= spawn_count *
-      threshold_permille~, setting ~threshold_crossed~
-  - ~threshold_crossed~ already exists on ~Wave~ and is unused, so the flag has a
-    home
-- [ ] Track per-wave resolved count, incrementing on death or flee
-- [ ] Complete the wave when resolved == ~spawn_count~ (not ~enemy_count~ —
-      spawning may not be finished)
-- [ ] Resolve the three cases explicitly: dead (resolved), fled (resolved and
-      scheduled to return), still alive (unresolved)
-- [ ] Decide wave membership tracking
-
-
-** Known trap: ~wave.enemy_indices~ indexes the flat ~bacteria.cold[]~ pool, and slots are recycled by ~find_free_bacteria_slot~. Once fleeing-and-returning exists, a returning bacterium can land in a recycled slot and be double-counted as resolved for the wrong wave. Membership must move onto the bacteria themselves, or returning bacteria need their own pool.
-
-*** Fleeing and Returning
-
-The difficulty-escalation engine, not an escape valve.
-
-- [ ] Flee remaining bacteria when the fraction *destroyed* reaches the rolled
-      threshold; resolve the wave at that moment
-  - The threshold is a per-mille fraction destroyed, not a fraction remaining —
-    see Threshold design. At level 15 a wave resolves around 59% destroyed, so a
-    five-bacterium wave flees with roughly two still standing
-- [ ] On flee, move bacteria into a pending roster on ~World~, not ~Level~
-      - The roster survives level transitions; ~Level_Transition~ must not clear it
-- [ ] Queue each fleeing bacterium for the *next wave*, positionally — flee again
-      and it enters the wave after that
-      - A level never opens with a flood; the backlog arrives one wave at a time
+- [ ] Flee the remaining bacteria when the fraction destroyed crosses the rolled
+      threshold; resolve the wave at that moment.
+- [ ] Move fled bacteria into a pending roster on ~World~, not ~Level~.
+- [ ] Queue each fled bacterium for the next wave, positionally.
 - [ ] Let carried bacteria flee again: fresh buff roll, fresh health restore, no
-      escape counter
-- [ ] On return, roll a resistance buff, restore health to spawn max, resume
-      normal state
-- [ ] Bound the roster against ~MAX_ENEMIES~; drop oldest when full
-      - Carrying across levels makes this bound do more work than it did when the
-        roster was level-scoped
+      escape counter.
+- [ ] On return, roll a resistance buff and restore health to spawn max.
+- [ ] Bound the roster against ~MAX_ENEMIES~; drop the oldest when full.
+- [ ] Add a fleeing-prohibited flag to ~Level~ and skip the threshold roll when
+      it is set.
 
-**** Fleeing Prohibited
+*** 1.4 Resistance buffs
 
-Required for the boss flush, though boss content is deferred. The roster cannot
-be escaped on indefinitely, so the 5-slot cap is what keeps escalation bounded —
-this is how that cap stops being exceeded.
+- [ ] Add a ~BuffCategory~ enum: ~Hardy~, ~Resistant~, ~Biofilm~, ~Frenzied~.
+- [ ] Hold buffs per instance on ~BacteriaCold~ as a fixed 5-slot array of
+      ~(category, magnitude)~ pairs.
+- [ ] Add a separate ~BUFF_DEFS~ table with absolute magnitudes.
+- [ ] Roll the category from the full set on each return; repeats allowed.
+- [ ] Wire ~species_unlocked~ into spawning so ~bacteria_spawn~ stops hardcoding
+      ~.Strep~.
 
-- [ ] Add a fleeing-prohibited flag to ~Level~, set when a level is a boss level
-- [ ] At such a level, do not roll a flee threshold and do not allow withdrawal —
-      all bacteria must be destroyed before advancing
-- [ ] Boss specifics deferred: separate level or special wave, whether the roster
-      enters or is spent before the boss. See Decisions for the reasoning that is
-      already settled.
+*** 1.5 Level transition
 
-** Do not drop the roster at level end. Fleeing on the final wave of a level would
-otherwise be free — the level still completes and the bacteria are gone forever.
-Since the final wave is where the flee threshold is most likely to cross, that
-becomes the optimal strategy and defeats the whole escalation engine.**
+- [ ] Implement ~Level_Transition~ as a real state: hold the frame, show the
+      level number, advance.
+- [ ] Make it the single owner of level progression: derive the next seed, draw
+      the wave count, initialize the waves, reset per-level state.
+- [ ] Confirm and remove ~Level.end_chance~.
 
-**** Resistance Buffs
+*** 1.6 Verify the slice
 
-Strengthening is by resistance only. Bacteria never change species.
-
-- [ ] Add a ~BuffCategory~ enum: ~Hardy~, ~Resistant~, ~Biofilm~, ~Frenzied~
-- [ ] Hold buffs per-instance on ~BacteriaCold~ as a fixed-size array of
-      ~(category, magnitude)~ pairs — 5 slots, a compile-time constant
-      - Buffs cannot live in ~BACTERIA_DEFS~; it is ~const~ and species-indexed
-- [ ] Add a separate ~BUFF_DEFS~ table with absolute magnitudes
-      - Do NOT derive buff values from ~BACTERIA_DEFS~ — changing a bacterium's
-        base health would silently rescale every buff
-- [ ] Roll the category from the full set on each return; repeats allowed
-- [ ] Restore health to spawn max on return, which may be buff-boosted
-- [ ] Wire ~species_unlocked~ (~src/procedural.odin:125~) into spawning, so
-      ~bacteria_spawn~ stops hardcoding ~.Strep~ (~src/level.odin:141~)
-      - For spawn variety only; there is no promotion
-
-** Note: base stats are still in progress and not final. Do not tune buff
-magnitudes until they settle.**
-
-** Two stacking risks, both blocking tuning rather than implementation:
-
-- [ ] Frenzied stacking — a 5-stack Frenzied Pseudomonas at base speed 400,
-      multiplied by a wave ~speed_scalar~ already scaling per level block
-      (~src/procedural.odin:132~), risks an unplayable screen. Consider
-      additive-with-cap rather than free multiplication.
-- [ ] Resistant vs. weapon weakness — weapons deal 6 / 3 / 2 for effective /
-      neutral / ineffective (~src/player.odin:37~). A Resistant bacterium with the
-      wrong weakness could become effectively unkillable.
-
-*** Level Transition
-
-- [ ] Implement ~Level_Transition~ as a real state that does real work: hold the
-      frame, show the level number, advance
-- [ ] Make it the single owner of level progression: derive next level's seed,
-      draw its wave count, initialize its waves, reset per-level state
-- [ ] Confirm and remove ~Level.end_chance~, which appears superseded by the
-      rolled flee threshold
-
-*** Verification
-
+- [ ] Verify no seed collision across levels.
 - [ ] Seeded replay: same seed, two runs, identical wave composition,
-      formations, flee thresholds, and return schedules
+      formations, flee thresholds, and return schedules.
 - [ ] Different seeds produce observably different runs from level 3 onward;
-      levels 1–2 are deliberately near-identical
-- [ ] Early levels are seed-insensitive: level 1 is always one wave of five with a
-      top-center entry across many seeds
-- [ ] Wave-count ranges widen with level as documented
-  - Cannot pass until the parked ~int_range~ semantics item is settled: current
-    draws are one short of the documented ranges
-- [ ] Flee and return do not perturb determinism
+      levels 1–2 are deliberately near-identical.
+- [ ] Level 1 is always one wave of five with a top-center entry across seeds.
+- [ ] Wave-count ranges widen with level as documented.
+- [ ] Flee and return do not perturb determinism.
 
-** Verification is last by sequence, not by importance. Nothing in this slice is confirmed until it passes.
+*** 1.7 Unit tests
 
-*** Open Questions
+- [ ] Decide the seam: drive ~level_init~ end to end, or extract the budget
+      split and jitter into a pure helper first.
+- [ ] Cover ~derive_seed~, ~wave_count_picker~, ~threshold_picker~, and the
+      budget split and jitter properties.
+- [ ] Cover ~level_init~ smoke: level 1 shape, sum/floor rules, same-seed
+      replay, different seeds differing.
+- [ ] Use a local RNG in every test; the test runner seeds the global generator
+      randomly.
 
-Blockers, not tasks. Each must be decided before the work that depends on it.
+** Phase 2 — Determinism
 
-- [ ] **Does the flee threshold scale with buff count?** A carried bacterium
-      returns at full health with up to 5 buffs. If it can flee the instant the
-      threshold crosses, a heavily buffed bacterium barely participates and the
-      buff system feels pointless. Blocks Fleeing and Returning.
-- [ ] **At boss levels, disabled outright or permitted but buff-free?** Only
-      "disabled" makes "clear all bacteria" mean what it says. Deferred with the
-      rest of the boss specifics.
-- [ ] **Does the roster enter the boss level or get spent first?** Letting it
-      arrive makes the boss level the hardest thing in the game by design. Deferred.
-- [ ] **Boss meter interaction** — independent of flee difficulty, or stacking?
-      Two escalating systems can multiply and quietly break tuning.
-- [ ] **Buff visual channel** — one outline per category is the current leaning,
-      held loosely. Species color already carries identity, so buffs need their own
-      channel. Not needed before the skill tree.
+Make decisions tick-driven and keep wall-clock time for motion only.
 
-** Resolved since the last update
+- [ ] Split ~delta_time~ into real elapsed time for motion and a fixed-increment
+      tick counter for decisions.
+- [ ] Convert ~formation_complete_time~ from ~sdl.GetTicks()~ to a tick count.
+- [ ] Fix the always-true dive gate.
+- [ ] Make ~formation_complete~ tick-driven rather than derived from continuous
+      motion.
+- [ ] Audit for further wall-clock reads feeding decisions.
 
-- Enemy count model — `3 + level*2` is a level budget split across the drawn
-  waves, with a floor of 3, and the floor wins. See Decisions "Enemy counts".
-  Implemented 2026-10-26.
-- Early-level variance — block 0's wave count draws `[1, min(level, 4)]`, count
-  jitter is 0 in block 0, and entries are pinned to top-center for levels 1–2.
-  See Decisions "Early-level determinism". All three are implemented; early-level
-  entry still needs runtime confirmation.
-- Degenerate ranges — `rand.int_range` panics unless `lo < hi`, so the block-0
-  level-1 case, the band-0 jitter, and the `MAX_WAVES` saturation all return
-  their single value without drawing. This corrects the earlier claim that such
-  draws still consume their seed triple. Skipping is harmless because every draw
-  site owns a throwaway RNG.
-- Jitter band — ±3 was chosen while per-wave counts were assumed to be 5–43; the
-  budget model made shares 3–6, so the band is now ±1.
-- Seed count — the per-wave count jitter adds a seventh distinct triple.
-- Threshold implementation scope — assign-and-display only, deliberately. The
-  crossing test was left to Wave Resolution rather than pulled forward, because
-  it needs a destroyed count and that runs straight into the ~enemy_indices~
-  recycling trap. Buying observability earlier would have meant either a
-  kill-count that silently breaks once bacteria return to recycled slots, or a
-  membership design decision inside a bookkeeping task.
-- Flee threshold direction — fraction *destroyed*, held as a per-mille ~int~.
-  The ambiguity was the whole problem: read as fraction remaining, the old ~0.8~
-  would mean "flee while 80% are still alive". ~WaveParams.threshold~ has been
-  removed, so the seed is the only source. See Threshold design under
-  Prerequisite: Seeding.
-- Threshold curve — half cycle of a raised cosine over 20 levels, per-wave ±50
-  spread, drawn independently per wave. Chosen so nothing flees through level 4
-  and one flees at level 5. The floor and span are provisional, to be tuned by
-  feel in play.
+** Phase 3 — Frame pacing
 
-- Strengthening model — resistance buffs, not promotion. Bacteria never change
-  species.
-- Identity on return — kept. Same bacterium, same species.
-- Tier promotion — removed entirely; nothing to gate.
-- Return scope — roster carries across levels on ~World~, drains into the next
-  wave positionally, and carried bacteria may flee again.
-- Boss flush — bosses clear the roster; fleeing is prohibited there. Boss
-  specifics deferred.
-- ~.Game_Over~ scoping — left unreachable for now; it has no trigger. Recorded
-  under Completed.
+Vsync is the normal pacer; the limiter exists only for the no-vsync path.
 
-** Determinism
+- [ ] Replace ~--no-vsync~ with ~--vsync <true|false>~; ~Config.vsync~ defaults
+      to ~true~.
+- [ ] Add ~--fps <n>~, default ~60~, ~0~ = unlimited; reject negatives.
+- [ ] Apply ~PRESENTVSYNC~ conditionally in ~initialize_sdl~.
+- [ ] Add a deadline-accumulator limiter after ~RenderPresent~, reading
+      ~config.fps~ live.
+- [ ] Correct the help text.
+- [ ] Verify: ~--vsync false~ at 60 fps, ~--fps 0~ unbounded, vsync on at monitor
+      rate, ~--fps 144 --vsync false~ at 144.
 
-Tracked separately from the slice: mixing a timing refactor into an advancement
-slice makes both harder to verify independently. See Decisions for the full rule.
+** Phase 4 — Clay UI foundation
 
-- [ ] Split ~delta_time~ (~src/game.odin:540~) into real elapsed time for motion
-      and a fixed-increment tick counter for decisions
-- [ ] Convert ~formation_complete_time~ (~src/level.odin:159~) from
-      ~sdl.GetTicks()~ to a tick count
-- [ ] Fix the always-true dive gate at ~src/level.odin:170~ — it never gated
-      anything, leaving ~formation_complete_time~ dead
-- [ ] Make ~formation_complete~ (~src/level.odin:149-161~) tick-driven rather than
-      derived from continuous motion; it is the one decision currently coupled to
-      wall-clock timing
-- [ ] Audit for further wall-clock reads feeding decisions
+Clay handles layout only; the project still measures text and draws every render
+command.
 
-** Frame Pacing
-
-Vsync is the normal pacer. The limiter exists only for the path where vsync is
-deliberately off.
-
-- [ ] Replace the dead ~--no-vsync~ flag with ~--vsync <true|false>~
-  - ~Config.no_vsync~ → ~Config.vsync~, defaulting to ~true~
-  - ~--no-vsync~ was parsed and advertised but never read: ~RENDERER_FLAGS~
-    always included ~PRESENTVSYNC~ (~src/game.odin:17~)
-- [ ] Add ~--fps <n>~, default ~60~, ~0~ = unlimited
-  - Only meaningful with ~--vsync false~; ignored when vsync is on, and said so
-    in ~--help~
-  - Reject negatives; ~0~ is the only "off" value
-- [ ] Apply ~PRESENTVSYNC~ conditionally in ~initialize_sdl~
-  - Base flags stay ~ACCELERATED~; OR in ~PRESENTVSYNC~ when ~config.vsync~
-- [ ] Add a deadline-accumulator limiter to the main loop, after ~RenderPresent~
-  - ~next_deadline += 1000 / fps~; sleep ~ceil(next_deadline - now)~ only while
-    ahead
-  - On overrun, reset ~next_deadline~ to now instead of catching up
-  - Same clock as ~delta_time~ (~sdl.GetTicks~), so there is one time source
-- [ ] Correct the help text: "simulation runs faster" is false for a delta-time
-      sim, and the flag it describes no longer exists
-- [ ] Verify: ~--vsync false~ shows ~60~ fps and non-zero ~delta_time~; ~--fps 0~
-      reproduces the unbounded loop; a vsync'd run stays at monitor rate with no
-      extra sleep; ~--fps 144 --vsync false~ shows ~144~
-
-** The options are eventually exposed in a settings menu. Until that exists, the
-CLI flags are both the testing path and the only path. See Deferred "Settings
-Menu".**
-
-** Completed
-
-Finished work, condensed. Details live in the code and in Decisions.
-
-- **Seeding and level scaffolding.** Added ~.Level~ to ~SeedCategory~ and chained
-  the derivation from run seed to level seed to wave seed. The per-level wave
-  count and per-wave flee threshold are seeded draws; the threshold is
-  assign-and-display only. ~level_init~ owns the chain, and ~wave_count~ and
-  ~level_to_params~ are wired through. Generation and threshold draws are
-  wall-clock free.
-- **App shell.** Update and render are gated on ~world.state~; the menu enters
-  ~.Playing~, Esc pauses, and ~--debug~ skips the menu with the overlay on.
-  ~.Game_Over~ remains deliberately unreachable because there is no player death
-  condition.
-- **CLI and overlay.** ~parse_args~ was fixed and extended with ~--seed~,
-  ~--level~, and ~--help~; it runs before SDL initializes. The debug overlay now
-  shows the real wave count and ~threshold_permille~. Its per-frame cost is the
-  FPS texture rebuild, not the threshold line.
-- **Wave initialization and enemy counts.** ~level_init~ now initializes every
-  drawn wave from its own ~(.Wave, i)~ seed. ~3 + level*2~ is a level budget split
-  across waves — floor 3, floor wins — with ±1 per-wave jitter, 0 in block 0.
-  Block 0's wave count draws ~[1, min(level, 4)]~, so level 1 is always one wave.
-  Entry pinning and the ~wave_index~ field are in; wave advancement and the Clay
-  overlay remain.
-
-** Deferred
-
-Deliberately out of scope. Not to be started until the current slice lands.
-
-*** Clay UI Foundation
-
-Clay (~https://github.com/nicbarker/clay~) is the UI layout layer for the debug
-overlay, menu, settings, and eventually the skill tree. It handles layout only:
-the project still measures text and draws every render command.
-
-- [ ] Vendor the official Odin bindings at a pinned tag (~v0.14~) into
-      ~src/clay-odin/~: ~clay.h~, ~clay.odin~, ~LICENSE~, and a README recording
-      the upstream URL and tag
-  - ~clay.h~ and ~clay.odin~ must come from the same tag; the binding is
-    generated against that header's ABI
-- [ ] Add ~scripts/build-clay.sh~ to compile the header locally
-  - ~cc -x c -DCLAY_IMPLEMENTATION -O2 -fPIC -c clay.h~, then ~ar rcs~ into
-    ~src/clay-odin/linux/clay.a~, the path the binding's ~foreign import~
-    expects
-  - Linux only for now; add per-OS branches when a release matrix exists
+- [ ] Vendor the official Odin bindings at a pinned tag into ~src/clay-odin/~:
+      ~clay.h~, ~clay.odin~, ~LICENSE~, and a README with upstream URL and tag.
+- [ ] Add ~scripts/build-clay.sh~ to compile the header into
+      ~src/clay-odin/linux/clay.a~.
 - [ ] Add a ~Makefile~ that owns staleness and calls the script
-  - ~$(CLAY_LIB)~ depends on ~clay.h~ and the script
-  - ~make run ARGS="--debug"~, ~make check~, ~make test~
-  - ~make clay~ forces a rebuild; ~make clean~ removes generated artifacts only
-- [ ] Ignore generated artifacts: ~build/~ and
-      ~src/clay-odin/linux/clay.a~
-- [ ] Import ~clay "./clay-odin"~ from a new ~src/ui.odin~
-  - ~UI~ struct holds the Clay arena, layout dimensions, font, and per-frame
-    scratch storage
-  - ~ui_init~ / ~ui_shutdown~ run after ~assets_init~ and before ~ttf.Quit~
-  - ~measure_text~ uses ~TTF_SizeUTF8~; Clay string slices are not
-    null-terminated
-  - ~ui_render~ interprets ~.Rectangle~, ~.Text~, ~.ScissorStart/End~ and
-    ~.Border~; skip ~.Image~, ~.Custom~ and ~.OverlayColor~ until needed
-- [ ] Port the debug overlay, then the menu, then settings
-  - Overlay carries the pending ~wave_index~ and ~enemy_count~ lines
-  - Settings needs pointer state: ~clay.SetPointerState~ plus SDL mouse input
-- [ ] Skill tree UI later, once advancement and procgen are solid
+      (~make run ARGS="--debug"~, ~make check~, ~make test~, ~make clay~,
+      ~make clean~).
+- [ ] Ignore ~build/~ and ~src/clay-odin/linux/clay.a~.
+- [ ] Add ~src/ui.odin~: ~UI~ struct, ~ui_init~ / ~ui_shutdown~,
+      ~measure_text~ via ~TTF_SizeUTF8~, and ~ui_render~ for ~.Rectangle~,
+      ~.Text~, ~.ScissorStart/End~ and ~.Border~.
+- [ ] Port the debug overlay, then the menu, then settings.
+- [ ] Add the pending ~wave_index~ and ~enemy_count~ lines to the overlay.
 
-** Constraints that shape the port:
+** Phase 5 — Settings menu
 
-- One font at size 16 today. ~measure_text~ can ignore ~fontId~; a font table
-  comes when the menu needs multiple sizes.
-- Corner radius 0 initially. SDL2 cannot draw rounded rectangles directly;
-  add ~RenderGeometry~ rounding only if it becomes visually important.
-- Use a UI-owned scratch arena reset each frame. The main loop never resets
-  ~context.temp_allocator~, so per-frame conversion there would leak.
-- Labels built with ~fmt.bprintf~ must outlive ~EndLayout~ and the render pass.
-  Keep their buffers in the UI frame scratch or build and render in one scope.
+- [ ] Add a settings page for vsync and the FPS cap.
+- [ ] Persist settings to disk and load them before the CLI is applied.
+- [ ] Toggle vsync at runtime via ~sdl.RenderSetVSync~, with a fallback for
+      backends where it fails.
+- [ ] Apply a new FPS target immediately and reset the deadline when it changes.
+- [ ] Keep ~--fps 0~ out of the menu; it is a testing value.
 
-*** Cross-Platform Release
+** Phase 6 — Enemy behavior architecture
 
-Development stays Linux-only. Releases are built natively on each OS rather than
-cross-compiled from Linux.
+Separate species identity from reusable gameplay behaviors.
 
-- [ ] Release CI matrix: Ubuntu, Windows, macOS Intel, macOS Apple Silicon
-  - Each job builds Clay for its own host via the script, then runs
-    ~odin build -target:...~
-  - Cross-compiling from Linux is rejected: macOS needs the SDK, SDL needs
-    target import libraries, and neither build can be smoke-tested remotely
-- [ ] Provision SDL2, SDL2_ttf and SDL2_image per runner
-- [ ] Package runtime dependencies per platform
-  - Windows: ship the SDL DLLs beside the executable
-  - macOS: app bundle with dylibs and the correct rpath; decide between two
-    architecture builds and a universal binary
-  - Linux: decide between requiring system SDL and bundling the libraries
-- [ ] Resolve assets relative to the executable (~SDL_GetBasePath~) rather than
-      the working directory
-  - Current ~"assets/..."~ paths break under shortcuts, app bundles, and Steam
-    launch options
-- [ ] Extend ~scripts/build-clay.sh~ with per-OS branches and archive formats
-      (~windows/clay.lib~ via ~llvm-lib~, ~macos*/clay.a~) only when the matrix
-      exists
+- [ ] Define reusable movement behaviors.
+- [ ] Define reusable attack behaviors.
+- [ ] Define reusable defensive traits.
+- [ ] Define reusable group behaviors.
+- [ ] Define reusable lifecycle behaviors.
+- [ ] Refactor the existing four species to compose these behaviors.
+- [ ] Add new bacteria using combinations of existing behaviors.
+- [ ] Verify behavior composition preserves seeded determinism.
 
-*** Enemy Behavior Architecture
+** Phase 7 — Skill tree
 
-The goal is to separate bacteria identity from reusable gameplay behaviors.
+- [ ] Node graph, persistence across levels, UI, stat application.
+- [ ] Mount into the existing ~Level_Transition~ state.
+- [ ] Do not start until advancement, procgen, and formation generation are
+      solid.
 
-Species define what a bacterium is; behavior traits define what it does.
+** Phase 8 — Boss fights
 
-- [ ] Define reusable movement behaviors
-- [ ] Define reusable attack behaviors
-- [ ] Define reusable defensive traits
-- [ ] Define reusable group behaviors
-- [ ] Define reusable lifecycle behaviors
-- [ ] Refactor existing bacteria to compose these behaviors
-- [ ] Add new bacteria using combinations of existing behaviors
-- [ ] Verify behavior composition preserves seeded determinis
+- [ ] Hidden boss meter filling across levels, resetting after a boss.
+- [ ] Resolve the interaction with fleeing-driven difficulty before tuning.
+- [ ] Implement the fleeing-prohibited boss level (the flag lands in 1.3).
 
-*** Skill Tree
+** Phase 9 — Adaptive wave composition
 
-- [ ] Node graph, persistence across levels, UI, stat application
-- [ ] Mount into the existing ~Level_Transition~ state
-      - Not to be started until advancement, procgen, and formation gen are solid
+- [ ] Skew wave composition toward species the player is not killing.
+- [ ] Build the kill-count system this depends on.
+- [ ] Treat fleeing-and-returning as a partial realization, not the whole.
 
-*** Settings Menu
+** Phase 10 — Cross-platform release
 
-Player-facing home for the frame-pacing options. Deferred. Until it exists, the
-CLI flags are both the testing path and the only path.
+Development stays Linux-only. Releases are built natively on each OS.
 
-- [ ] Add a settings page for vsync and the FPS cap
-  - Decide whether it is a mode inside ~.Menu~ or a new ~GameState~
-  - ~.Menu~ currently renders only, and Enter is a bare state flip
-- [ ] Persist settings to disk and load them before the CLI is applied
-  - Precedence to decide: defaults < saved settings < CLI
-- [ ] Toggle vsync at runtime via ~sdl.RenderSetVSync~
-  - Returns failure on some backends; decide between a restart prompt and
-    recreating the renderer plus re-running ~assets_init~
-- [ ] Apply a new FPS target immediately
-  - Derive the frame duration from ~config.fps~ live; reset the deadline when the
-    target changes so the first frame after the change is not early or late
-- [ ] Keep ~--fps 0~ out of the menu; it is a testing value, not a play mode
+- [ ] Release CI matrix: Ubuntu, Windows, macOS Intel, macOS Apple Silicon.
+- [ ] Provision SDL2, SDL2_ttf and SDL2_image per runner.
+- [ ] Package runtime dependencies per platform.
+- [ ] Resolve assets relative to the executable (~SDL_GetBasePath~).
+- [ ] Extend ~scripts/build-clay.sh~ with per-OS branches only when the matrix
+      exists.
 
-*** Boss Fights
+** Phase 11 — Documentation
 
-- [ ] Hidden boss meter filling across levels, resetting after a boss
-- [ ] Resolve interaction with fleeing-driven difficulty first
-
-*** Adaptive Wave Composition
-
-- [ ] Wave composition skewing toward species the player is not killing
-- [ ] Requires a kill-count system that does not exist yet
-- [ ] Fleeing-and-returning is a partial realization of this, not the whole of it
-
-*** Documentation
-
-- [ ] Add an explicit "current state" label to ~PROJECT.md~'s Current Systems
-      section, so it is distinguishable from ~ARCHITECTURE.md~ (see Decisions)
-- [ ] Update ~SESSION.md~ once the current slice completes
-- [ ] ~~Demo section in README.md is an empty heading~~
+- [ ] Update ~SESSION.md~ when the current slice closes.
+- [ ] Keep ~PROJECT.md~'s Current State current as phases land.

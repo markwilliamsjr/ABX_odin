@@ -18,8 +18,8 @@ of shipped behavior makes it look wrong when it is not.
 - Do not treat a gap between `ARCHITECTURE.md` and the code as a contradiction.
   Such gaps are the unfinished state of a design the docs already describe
   accurately.
-- `PROJECT.md`'s "Current Systems" is the only document claiming systems exist,
-  so it is the one that most needs an explicit label. It currently has none.
+- `PROJECT.md`'s "Current State" is the only document claiming systems exist, so
+  it is the one that most needs an explicit label. It now carries one.
 - Every `ARCHITECTURE.md` mechanism is intent until code exists for it.
 
 ## Game structure
@@ -116,9 +116,11 @@ kills, low enough that the budget stays roughly honest.
   overflow is removed structurally by the split. The clamp stays as the guard for
   the case where one wave carries the whole budget, and as the final bound on a
   share.
-- The threshold table in `ROADMAP.org` must be re-derived. The threshold remains
-  scale-free (a per-mille fraction destroyed), but at 3–6 enemies one kill is
-  167–333 permille, so crossings are coarse.
+- At 3–6 enemies one kill is 167–333 permille, so threshold crossings are
+  coarse. The threshold remains scale-free (a per-mille fraction destroyed).
+- The count jitter band is ±1. It was ±3 while per-wave counts were assumed to
+  be 5–43; the budget split made shares 3–6, so a wider band would swamp the
+  share itself.
 
 ## Early-level determinism
 
@@ -134,8 +136,8 @@ levels are heavily seed-sensitive.
 - **Entry point**: levels 1–2 pin entry to top-center (`ENTRY_POINTS[2]`); levels
   3+ draw from the full set.
 
-The jitter draw still runs every wave even when its band is 0, and the wave-count
-draw still runs at level 1 even though its range has collapsed to a single value.
+Collapsed ranges return their single value without drawing, because
+`rand.int_range` panics unless `lo < hi`. See Consequences.
 
 ### Reason
 
@@ -157,7 +159,7 @@ the generator would add a second code path for the same outcome.
 
 - Level 1 is structurally identical across seeds: one wave, five enemies, same
   formation, same top-center entry. Its `threshold_permille` still varies over
-  900–1000, but that is unobservable: a five-enemy wave crosses every threshold in
+  900–999, but that is unobservable: a five-enemy wave crosses every threshold in
   that band only at full destruction.
 - Degenerate ranges return their single value without drawing. `rand.int_range`
   panics unless `lo < hi`, so the block-0 level-1 case, the band-0 jitter, and the
@@ -172,6 +174,128 @@ the generator would add a second code path for the same outcome.
   `region_count` points, or `generate_entry_points` returns `ok = false`.
 - Later variance sources (formation variety, species choice) should be gated by
   level the same way, so the opening does not drift back toward generated.
+
+Wave-count ranges by block (5 levels per block; the table is the intended
+inclusive range):
+
+| block | levels | range |
+|-------+--------+-------|
+|     0 |    1–5 |   1–4 |
+|     1 |   6–10 |   3–6 |
+|     2 |  11–15 |   5–8 |
+|     3 |  16–20 |   7–10 |
+|     4 |  21–25 |   9–10 |
+|    5+ |    26+ |    10 |
+
+Block 0 draws `[1, min(level, 4)]`: level 1 is always one wave, level 2 one or
+two, level 3 one to three, levels 4–5 one to four. Adjacent blocks overlap by
+two values, so escalation is non-decreasing rather than strictly increasing.
+`MAX_WAVES` is 10.
+
+Because `rand.int_range` is exclusive at the upper bound, the current draws are
+one short of this table: block 0 gives L1 = 1, L2 = 1, L3 = 1–2, L4–5 = 1–3;
+block 1 gives 3–5; block 2 gives 5–7; block 3 gives 7–9; block 4 gives 9 only;
+block 5+ returns 10. This is the range-semantics open question, not a second
+design.
+
+### Open questions (not yet decided)
+
+- **Is `rand.int_range` treated as inclusive or exclusive?** The documented
+  ranges and the count jitter assume inclusive. Either pass `hi + 1` (and
+  `band + 1` for jitter), or accept exclusive ranges and rewrite the tables. Do
+  not encode the current behaviour in tests before this is settled.
+
+## Wave resolution and membership
+
+### Decision
+
+Wave membership is carried by the bacterium, not by the wave. Each wave receives
+a unique ID at `wave_init`; each spawned bacterium stores the ID of its owning
+wave and clears it when it leaves play. `Wave.enemy_indices` is removed once the
+formation check and diver selection stop reading it.
+
+Each wave tracks two counters: `destroyed_count` and `fled_count`. The resolved
+count is their sum; there is no third field. Death increments destroyed.
+Fleeing increments fled. Either one clears ownership.
+
+Wave resolution has three explicit cases: dead (resolved), fled (resolved and
+scheduled to return), and still alive (unresolved).
+
+The threshold test runs only after spawning has completed
+(`spawn_count == enemy_count`):
+
+```
+destroyed_count * 1000 >= spawn_count * threshold_permille
+```
+
+It sets `threshold_crossed` once. A wave completes when spawning is complete and
+`resolved == spawn_count`.
+
+The resolution pass runs after spawning and dive updates in the frame. It
+advances `wave_index` exactly once per completed wave. When `wave_index` reaches
+`wave_count`, it sets `Level.level_end`; `.Level_Transition` remains the owner of
+the actual transition.
+
+Deaths are attributed at the moment health reaches zero, not by a later scan of
+a slot array. The collision path receives the level, or an equivalent owner
+lookup, so the kill increments the owning wave directly.
+
+Wave resolution is split into two steps. This step lands ownership, counters,
+the crossing test, completion, and advancement. Crossing the threshold sets and
+logs `threshold_crossed` but removes nothing; `fled_count` remains zero.
+Completion therefore still means all spawned bacteria destroyed. The flee
+response is Phase 1.3.
+
+### Reason
+
+`enemy_indices` describes slots at spawn time. `find_free_bacteria_slot` recycles
+a slot as soon as its occupant dies, so one index can describe two different
+bacteria within the same wave, and dead indices remain in the array. A count
+derived from it is unsound even before returning bacteria exist. Ownership is the
+smallest identity that survives recycling.
+
+Two counters keep the threshold meaningful. Fleeing must resolve a wave without
+counting as destruction; one combined counter would make the fraction destroyed
+rise when bacteria escape, which is the opposite of what the threshold measures.
+Deriving resolved avoids a third value that can disagree with its inputs.
+
+The spawning gate protects the denominator. `spawn_count` is the denominator, and
+it grows while spawning. Without the gate, one kill early in a wave can cross
+almost any threshold, and the rest of the wave's budget would be resolved away
+before it ever spawned.
+
+Attribution at the moment of death avoids an ordering dependency. A later scan
+would have to run before the next spawn recycles the slot; making that safe is
+more fragile than incrementing the owning wave at the kill site.
+
+Splitting the response out keeps the roster questions — next-wave accounting,
+roster capacity, level transitions — out of the mechanics that must exist anyway.
+The crossing branch is the only part that changes in 1.3.
+
+### Consequences
+
+- Ownership lives on `BacteriaCold` beside `bacteria_state`; it is identity, not
+  per-frame transform data.
+- Wave IDs are derived from level number and wave index rather than a run-wide
+  counter, so no extra state is threaded through transitions.
+- `enemy_indices` is deleted. The formation check, diver count, and diver
+  selection scan the pool for active bacteria owned by the wave.
+- `fled_count` stays zero until 1.3, so threshold crossing is observable only in
+  logs during 1.2.
+- `wave_init` must reset `spawn_count`, `spawn_index`, timers,
+  `formation_complete`, `formation_complete_time`, `threshold_crossed`, and both
+  counters. `level_init` must reset `level_end` as well as `wave_index`.
+- A failed `bacteria_spawn` must not increment `spawn_count`; otherwise the wave
+  carries a phantom member that can never resolve.
+- A formation that places fewer bacteria than `enemy_count` would prevent
+  `spawn_count == enemy_count` forever. Bound the region walk and log it until a
+  policy exists.
+- `Level.level_end` is set but not consumed until 1.5. The existing
+  `wave_index < wave_count` guard stops updates.
+- Temporary `fmt` logging is the verification channel until the Clay overlay
+  lands. Remove it when the overlay carries wave state.
+- This supersedes the "assign-and-display only" scope note under "Flee
+  threshold": the crossing test now lands in 1.2 and the response in 1.3.
 
 ## Fleeing and returning
 
@@ -229,9 +353,9 @@ actually behave.
 - **No species promotion, ever.** An earlier decision to promote fleeing
   bacteria only to already-unlocked species is superseded and no longer applies.
   There is no promotion to gate.
-- `species_unlocked` (`src/procedural.odin:124`, computed but never read) is
+- `species_unlocked` (`src/procedural.odin:125`, computed but never read) is
   still to be wired, but for **spawn variety**, not promotion.
-  `bacteria_spawn` currently hardcodes `.Strep` (`src/level.odin:128`), so the
+  `bacteria_spawn` currently hardcodes `.Strep` (`src/level.odin:178`), so the
   game is one species throughout.
 
 ## Return scope
@@ -322,6 +446,65 @@ never be exceeded.
 - **Boss shape.** Separate level, or special wave within a level? If a special
   wave, the other waves in that level follow normal flee rules.
 
+## Flee threshold
+
+### Decision
+
+Each wave draws its flee threshold once, at spawn, from
+`derive_seed(wave_seed, .Level, 0)`. The threshold is a per-mille integer
+fraction **destroyed**, not a fraction remaining. The crossing test is
+`destroyed * 1000 >= spawn_count * threshold_permille`, all integer: no
+division, no float compare, no boundary rounding.
+
+The curve is a half cycle of a raised cosine over 20 levels:
+
+```
+t = clamp((level - 1) / 20, 0, 1)
+base = 500 + 225 * (1 + cos(pi * t))
+```
+
+A per-wave spread of ±50 is drawn around the base, then the result is clamped to
+`[500, 1000]`.
+
+The threshold was assign-and-display only before wave resolution. The crossing
+test now lands in Phase 1.2 alongside wave-membership tracking; the flee response
+lands in Phase 1.3.
+
+### Reason
+
+Direction was the whole problem. The old `WaveParams.threshold = 0.8` was
+ambiguous between "flee at 80% destroyed" and "flee while 80% alive"; read as
+fraction remaining, it inverts the difficulty. Naming the quantity *destroyed*
+and storing per-mille makes the value unambiguous and diffable in logs, which is
+how the seeding work is verified.
+
+The curve is flat at both ends and steepest mid-curve, so early levels stay
+predictable and the middle of the run moves fastest. Two separate bounds do
+different jobs: 500 is the chosen floor, and 1000 is what keeps the value
+crossable.
+
+The spread is applied before the clamp. `base + spread` peaks at exactly 1000 at
+level 1, so the upper bound is exactly sufficient and the spread stays symmetric
+everywhere. A lower upper bound would truncate the positive half of the draw at
+early levels and make the coin flip one-sided.
+
+### Consequences
+
+- One independent draw per wave, so waves within a level differ from each other
+  rather than sharing a level-wide value.
+- The 500 floor and the `/20` span were picked for shape, not balance, and are
+  expected to be tuned in play.
+- `WaveParams.threshold` has been removed; the seed is the only source.
+- Under exclusive `rand.int_range`, the spread draw is `[-50, 49]`, not a
+  perfectly symmetric ±50. This follows the range-semantics decision under
+  "Early-level determinism".
+- Per-wave sizes are roughly 3–6 under the budget split, so one kill is
+  167–333 permille and crossings are coarse. The old table written against
+  `3 + level*2` per wave is superseded and removed; the curve's shape is
+  unchanged.
+- At level 15 the threshold is around 593 permille, so a five-bacterium wave
+  flees with roughly two still standing.
+
 ## Resistance buffs
 
 ### Decision
@@ -361,7 +544,7 @@ simplicity and for greater variance in resulting stacks.
   scales with level block (`src/procedural.odin:132`), could produce an
   unplayable screen.
 - **`Resistant` interacts with the weapon weakness system.** Weapons deal 6 / 3 / 2
-  for effective / neutral / ineffective (`src/player.odin:37`). A Resistant
+  for effective / neutral / ineffective (`src/player.odin:42-66`). A Resistant
   bacterium with the wrong weakness could become effectively unkillable.
 - **Base stats are not final**, so buff magnitudes must not be tuned yet. They are
   to be stored as absolute values in a separate `BUFF_DEFS` table, deliberately
@@ -489,12 +672,12 @@ deterministic enemy waves"* — waves, not runs.
 
 - **The simulation is currently non-deterministic and violates this rule.** Three
   sites need fixing:
-  - `src/level.odin:146` — `formation_complete_time = u64(sdl.GetTicks())` must
+  - `src/level.odin:196` — `formation_complete_time = u64(sdl.GetTicks())` must
     become a tick count.
-  - `src/level.odin:157` — `if u64(sdl.GetTicks()) >= wave.formation_complete_time`
+  - `src/level.odin:206` — `if u64(sdl.GetTicks()) >= wave.formation_complete_time`
     is **always true**, since ticks only increase. The dive gate has never
     actually gated anything, and `formation_complete_time` is currently dead.
-  - `src/game.odin:431` — `delta_time` derived from `GetTicks()` must be split:
+  - `src/game.odin:548` — `delta_time` derived from `GetTicks()` must be split:
     real elapsed time for motion, fixed increments for the tick counter.
 - **`formation_complete` is the one real threat to this rule.** It is a decision
   derived from continuous motion: whether every bacterium has finished its entry
@@ -524,8 +707,8 @@ deterministic enemy waves"* — waves, not runs.
 The flee threshold direction is settled: a per-mille fraction **destroyed**, drawn
 once per wave from `derive_seed(wave_seed, .Level, 0)`. The old
 `WaveParams.threshold = 0.8` was ambiguous between fraction killed and fraction
-remaining and has been removed, so the seed is the only source of a threshold. See
-`ROADMAP.org` under "Threshold design".
+remaining and has been removed, so the seed is the only source of a threshold.
+See "Flee threshold".
 
 ## Frame pacing
 
@@ -553,7 +736,7 @@ the setting honest and lets a test run turn vsync off without a source edit.
 With vsync genuinely off, the loop has no upper bound. Some players turn vsync off
 deliberately; without a replacement pacer they get an unbounded loop. Two things
 follow. CPU use is unbounded for no visual benefit. And because `delta_time` comes
-from `GetTicks()` at millisecond resolution (`src/game.odin:539`), many frames
+from `GetTicks()` at millisecond resolution (`src/game.odin:547-548`), many frames
 compute `delta_time == 0`, so motion stalls on those frames instead of advancing.
 A 60 fps default restores a sane cadence and matches the rate the game is tuned
 against.
@@ -673,6 +856,17 @@ appears once.
   `Level_Transition` both need to derive seeds and only see `World`. Selection —
   fixed from `--seed` or clock-derived — still happens once, in `game_init`, and
   must be written before `world_init` runs.
+- The derivation graph has **six** distinct `(parent, category, number)` triples
+  in a run:
+  - `(master_seed, .Level, level_number)` → `level_seed`
+  - `(level_seed, .Level, 0)` → the level's wave count
+  - `(level_seed, .Wave, i)` → `wave_seed`
+  - `(wave_seed, .Entry, 0)` → entry points
+  - `(wave_seed, .Level, 0)` → flee threshold
+  - `(wave_seed, .Wave, 0)` → count jitter
+- Index bases: level number is 1-based and player-facing, matching
+  `level_to_params`. Wave index is 0-based and internal, matching
+  `level.wave[i]`. Mixing them is how a level silently wraps to the wrong block.
 
 ## Scope
 

@@ -1,7 +1,8 @@
 # Game Architecture
 
 This document describes the **intended** design, not the current
-implementation. What exists today is tracked in `PROJECT.md` and `ROADMAP.org`.
+implementation. What exists today is tracked in `PROJECT.md`; remaining work is
+tracked in `ROADMAP.org`.
 
 Rationale for settled decisions lives in `DECISIONS.md`.
 
@@ -50,7 +51,7 @@ phase rather than scattered through the loop.
 | `.Menu` | nothing | menu only; no world behind it |
 | `.Playing` | full simulation | world |
 | `.Paused` | nothing | world, frozen |
-| `.Level_Transition` | transition logic (not yet implemented) | world or transition output |
+| `.Level_Transition` | level progression; holds the frame and advances | world or transition output |
 | `.Game_Over` | nothing; unreachable today | world |
 
 Both switches are exhaustive, not partial. Adding a `GameState` must fail the
@@ -65,6 +66,16 @@ drawing is not paused, it is broken.
 `--debug` starts directly in `.Playing` and enables the overlay, skipping the
 menu. The level is generated in both paths, so there is a single call site for
 initial level generation.
+
+## Level progression
+
+A level ends when all of its waves are resolved. `Level_Transition` owns
+progression: it holds the frame, shows the level number, derives the next
+level's seed, draws its wave count, initializes its waves, and resets per-level
+state. `world_init` performs the only initial generation; every later level is
+created by the transition state.
+
+The pending flee roster lives on the world and must survive this transition.
 
 ## Ending a wave
 
@@ -89,8 +100,9 @@ Bacteria that fled are by definition bacteria the player did not kill.
 
 Each wave draws a flee threshold from the seed **once**, at spawn. On every
 subsequent frame the threshold is compared deterministically — no per-frame
-probability anywhere in the flee path. When the number of remaining bacteria
-crosses the threshold, they flee and the wave resolves at that moment.
+probability anywhere in the flee path. The threshold is a per-mille fraction
+**destroyed**; when that fraction reaches it, the remaining bacteria flee and
+the wave resolves at that moment.
 
 ### Resistance
 
@@ -127,6 +139,21 @@ This makes bosses the pressure valve for the resistance system. Without a
 periodic hard-clear, a bacterium could be escaped on indefinitely; with it,
 escapes are bounded across a run and the roster develops a rhythm — build up,
 flush, rebuild — rather than a monotonic ramp.
+
+## Enemy behavior
+
+Species define identity and base properties. Behavior is composed from reusable
+categories — movement, attack, defense, group, and lifecycle — rather than
+implemented as a separate branch per species. A species is a configuration of
+behaviors plus its identity.
+
+Per-instance state (health, behavior state, wave membership, and resistance
+buffs) stays separate from species definitions and behavior configuration.
+Returning bacteria keep their species; only their buffs change.
+
+The existing four species are refactored onto this model before new species or
+behavior categories are added. Behavior choices that affect generated content
+must use the seed derivation rules, never wall-clock time.
 
 ## Seeding
 
@@ -178,3 +205,21 @@ all procedurally generated from a set of rules.
 For levels 1–2, entry is pinned to a single top-center point by passing a
 one-element list of available points to the entry generator. Later levels draw
 from the full set.
+
+## UI
+
+Clay (https://github.com/nicbarker/clay) is the layout layer for the debug
+overlay, menu, settings, and eventually the skill tree. It handles layout only:
+the project measures text and turns Clay's render commands into SDL draw calls.
+
+The debug overlay, menu, and settings are currently drawn directly with SDL.
+They move to Clay before the skill tree is built.
+
+## Release
+
+Development is Linux-only. Releases are built natively on each target OS rather
+than cross-compiled from Linux: macOS needs its SDK, SDL needs per-target import
+libraries, and neither build can be smoke-tested remotely.
+
+Assets are resolved relative to the executable, not the working directory, so
+shortcuts, app bundles, and Steam launch options all work.
