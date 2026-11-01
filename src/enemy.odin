@@ -4,6 +4,7 @@ import "core:math"
 import "core:math/rand"
 import sdl "vendor:sdl2"
 // ---- Constants ----
+OWNER_NONE :: -1
 
 // ---- Types ----
 BacteriaSpecies :: enum {
@@ -76,6 +77,7 @@ BacteriaSpawnParams :: struct {
 	path_data:          EntryPathData,
 	formation_position: sdl.FPoint,
 	species:            BacteriaSpecies,
+	wave_index:         int,
 }
 
 BacteriaDefinition :: struct {
@@ -118,6 +120,7 @@ BacteriaCold :: struct {
 	t, speed, speed_scalar:                            f32,
 	dive_initialized, return_initialized, should_flee: bool,
 	formation_point, return_start_points:              sdl.FPoint,
+	wave_index:                                        int,
 }
 
 // ---- Definitions / Table ----
@@ -226,6 +229,7 @@ bacteria_init :: proc(hot: ^BacteriaHot, cold: ^BacteriaCold, spawn_params: ^Bac
 	cold.should_flee = false
 	cold.current_segment = 0
 	cold.pause_timer = 0.0
+	cold.wave_index = spawn_params.wave_index
 
 	switch hot.species {
 	case .Strep:
@@ -478,6 +482,13 @@ find_free_bacteria_slot :: proc(bacteria: ^Bacteria) -> int {
 		}
 	}
 	return -1
+}
+
+bacteria_pool_reset :: proc(bacteria: ^Bacteria) {
+	bacteria^ = Bacteria{}
+	for i in 0 ..< MAX_ENEMIES {
+		bacteria.cold[i].wave_index = OWNER_NONE
+	}
 }
 
 bacteria_spawn :: proc(bacteria: ^Bacteria, spawn_params: ^BacteriaSpawnParams) -> int {

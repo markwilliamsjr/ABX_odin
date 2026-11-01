@@ -39,7 +39,6 @@ Wave :: struct {
 	threshold_permille:                                                   int,
 	spawn_delay, spawn_timer, dive_delay, dive_timer, speed_scalar:       f32,
 	path:                                                                 PathType,
-	enemy_indices:                                                        [MAX_ENEMIES]int,
 	formation_complete, threshold_crossed:                                bool,
 	formation_complete_time:                                              u64,
 	control_points:                                                       [3]sdl.FPoint,
@@ -48,10 +47,12 @@ Wave :: struct {
 	region_enemy_count:                                                   [MAX_REGIONS]int,
 	spawn_region, spawn_index:                                            int,
 	diver_selection_rule:                                                 DiverSelectionRule,
+	index:                                                                int,
 }
 
 Level :: struct {
 	wave:                                 [MAX_WAVES]Wave,
+	bacteria:                             Bacteria,
 	wave_count, level_number, wave_index: int,
 	level_end:                            bool,
 	end_chance:                           f32,
@@ -59,7 +60,14 @@ Level :: struct {
 
 // ---- Init ----
 
-wave_init :: proc(wp: ^WaveParams, wave: ^Wave, wave_seed: u64, enemy_count, level: int) {
+wave_init :: proc(
+	wp: ^WaveParams,
+	wave: ^Wave,
+	wave_seed: u64,
+	enemy_count, level: int,
+	wave_index: int,
+) {
+	wave.index = wave_index
 	wave.level = level
 
 	entry_rng_state := rand.create(derive_seed(wave_seed, .Entry, 0))
@@ -112,7 +120,8 @@ wave_init :: proc(wp: ^WaveParams, wave: ^Wave, wave_seed: u64, enemy_count, lev
 	wave.formation_complete = false
 }
 
-level_init :: proc(bacteria: ^Bacteria, level: ^Level, master_seed: u64, level_number: int) {
+level_init :: proc(level: ^Level, master_seed: u64, level_number: int) {
+	bacteria_pool_reset(&level.bacteria)
 	level.level_number = level_number
 	level_seed := derive_seed(master_seed, .Level, level.level_number)
 	level_params := level_to_params(level.level_number)
@@ -149,7 +158,7 @@ level_init :: proc(bacteria: ^Bacteria, level: ^Level, master_seed: u64, level_n
 
 		share = clamp(share + jitter, WAVE_ENEMY_FLOOR, MAX_ENEMIES)
 
-		wave_init(&level_params, &level.wave[i], wave_seed, share, level_number)
+		wave_init(&level_params, &level.wave[i], wave_seed, share, level_number, i)
 	}
 
 }
@@ -176,8 +185,11 @@ wave_update :: proc(wave: ^Wave, bacteria: ^Bacteria, delta_time: f32) {
 			path_data          = path_data,
 			formation_position = destination,
 			species            = .Strep,
+			wave_index         = wave.index,
 		}
-		wave.enemy_indices[wave.spawn_count] = bacteria_spawn(bacteria, &params)
+		if bacteria_spawn(bacteria, &params) == -1 {
+			return
+		}
 		wave.spawn_index += 1
 		wave.spawn_count += 1
 	}
@@ -185,13 +197,17 @@ wave_update :: proc(wave: ^Wave, bacteria: ^Bacteria, delta_time: f32) {
 	// Check if holding
 	if wave.spawn_count == wave.enemy_count && !wave.formation_complete {
 		all_holding := true
-		for i in 0 ..< wave.spawn_count {
-			if bacteria.cold[wave.enemy_indices[i]].bacteria_state != .Holding {
+		owned := 0
+		for i in 0 ..< MAX_ENEMIES {
+			if !bacteria.hot[i].active do continue
+			if bacteria.cold[i].wave_index != wave.index do continue
+			owned += 1
+			if bacteria.cold[i].bacteria_state != .Holding {
 				all_holding = false
 				break
 			}
 		}
-		if all_holding {
+		if all_holding && owned == wave.spawn_count {
 			wave.formation_complete = true
 			wave.formation_complete_time = u64(sdl.GetTicks())
 		}
@@ -205,9 +221,10 @@ wave_dive_update :: proc(wave: ^Wave, bacteria: ^Bacteria, delta_time: f32) {
 
 	if u64(sdl.GetTicks()) >= wave.formation_complete_time {
 		divers_count := 0
-		for i in 0 ..< wave.spawn_count {
-			idx := wave.enemy_indices[i]
-			if bacteria.cold[idx].bacteria_state == .Diving {
+		for i in 0 ..< MAX_ENEMIES {
+			if !bacteria.hot[i].active do continue
+			if bacteria.cold[i].wave_index != wave.index do continue
+			if bacteria.cold[i].bacteria_state == .Diving {
 				divers_count += 1
 			}
 		}

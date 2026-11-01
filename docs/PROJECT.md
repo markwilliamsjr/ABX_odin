@@ -30,10 +30,14 @@ Implemented:
 - **Player.** Movement, weapon selection, firing, bullets, and bullet/bacteria
   collision.
 - **Bacteria.** Species definitions for Strep, Staph, E. coli, and Pseudomonas;
-  a flat cold/hot SoA pool; spawning, movement, diving, and rendering.
+  a flat cold/hot SoA pool owned by the level; spawning, movement, diving, and
+  rendering. Each bacterium stores its owning wave index, with `-1` meaning not
+  in play; the slot is cleared at death.
 - **Levels and waves.** Seeded level and wave seeds; per-level wave count; the
   `3 + level*2` enemy budget split across waves with a floor of 3; per-wave
-  count jitter; `wave_index`; all drawn waves initialized at level start.
+  count jitter; `wave_index`; all drawn waves initialized at level start. Each
+  wave stores its own index, and the formation, diver-count, and diver-selection
+  scans find members by ownership rather than by a slot list.
 - **Procedural generation.** Seed derivation, entry-point selection, formation
   bounds, line formation layout, and entry paths. Entry is pinned to top-center
   for levels 1–2.
@@ -48,7 +52,8 @@ Implemented:
 
 Not yet implemented:
 
-- Wave resolution, wave completion, and `wave_index` advancement.
+- Wave resolution, wave completion, and `wave_index` advancement. Destroyed and
+  fled counts do not exist yet, so the flee threshold is still unconsumed.
 - Fleeing, returning bacteria, the pending roster, and resistance buffs.
 - Real `Level_Transition` logic.
 - Clay UI, settings, skill tree, bosses, and adaptive wave composition.

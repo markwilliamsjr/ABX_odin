@@ -326,10 +326,11 @@ compute_formation_bounds :: proc(
 }
 
 select_first_found :: proc(wave: ^Wave, bacteria: ^Bacteria) -> int {
-	for i in 0 ..< wave.spawn_count {
-		idx := wave.enemy_indices[i]
-		if bacteria.cold[idx].bacteria_state == .Holding {
-			return idx
+	for i in 0 ..< MAX_ENEMIES {
+		if !bacteria.hot[i].active do continue
+		if bacteria.cold[i].wave_index != wave.index do continue
+		if bacteria.cold[i].bacteria_state == .Holding {
+			return i
 		}
 	}
 	return -1

@@ -41,9 +41,9 @@ Inclusive ranges were chosen on 2026-10-31: the documented ranges stand, and
 Ownership, counters, crossing detection, and advancement. The flee response is
 1.3. Full detail: [[file:DECISIONS.md::Wave resolution and membership][Wave resolution and membership]].
 
-- [ ] Move the ~Bacteria~ pool into ~Level~; store the index on ~Wave~ and the
+- [X] Move the ~Bacteria~ pool into ~Level~; store the index on ~Wave~ and the
       owning wave index on ~BacteriaCold~; clear ownership when it leaves play.
-- [ ] Replace the formation, diver-count, and diver-selection scans with owner
+- [X] Replace the formation, diver-count, and diver-selection scans with owner
       scans; delete ~enemy_indices~.
 - [ ] Add ~destroyed_count~ and ~fled_count~ to ~Wave~; derive ~resolved~ as
       their sum.

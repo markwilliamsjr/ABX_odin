@@ -42,7 +42,6 @@ Game :: struct {
 World :: struct {
 	player:      Player,
 	bullets:     Bullets,
-	bacteria:    Bacteria,
 	level:       Level,
 	state:       GameState,
 	master_seed: u64,
@@ -119,7 +118,7 @@ world_init :: proc(game: ^Game) {
 		game.world.state = .Menu
 	}
 	game.world.player = player_init(SCREEN_WIDTH, SCREEN_HEIGHT)
-	level_init(&game.world.bacteria, &game.world.level, game.world.master_seed, game.config.level)
+	level_init(&game.world.level, game.world.master_seed, game.config.level)
 }
 
 assets_init :: proc(asset: ^Assets, renderer: ^sdl.Renderer) {
@@ -159,15 +158,11 @@ world_update :: proc(game: ^Game, keystate: [^]u8, delta_time: f32) {
 		player_update(&game.world.player, keystate, delta_time)
 		player_fire_bullet(&game.world.player, &game.world.bullets, keystate)
 		bullet_update(&game.world.bullets, delta_time)
-		bacteria_update(&game.world.bacteria, delta_time, game.world.player.x)
-		collision_update(&game.world.bullets, &game.world.bacteria)
+		bacteria_update(&level.bacteria, delta_time, game.world.player.x)
+		collision_update(&game.world.bullets, &level.bacteria)
 		if level.wave_index < level.wave_count {
-			wave_update(&game.world.level.wave[level.wave_index], &game.world.bacteria, delta_time)
-			wave_dive_update(
-				&game.world.level.wave[level.wave_index],
-				&game.world.bacteria,
-				delta_time,
-			)
+			wave_update(&game.world.level.wave[level.wave_index], &level.bacteria, delta_time)
+			wave_dive_update(&game.world.level.wave[level.wave_index], &level.bacteria, delta_time)
 		}
 	case .Level_Transition:
 	case .Paused:
@@ -227,6 +222,7 @@ collision_update :: proc(bullet: ^Bullets, bacteria: ^Bacteria) {
 				hot.health -= calculate_bullet_damage(weapon_def^, bacteria_def^)
 				if hot.health <= 0 {
 					hot.active = false
+					cold.wave_index = OWNER_NONE
 				}
 				bullet_remove(bullet, i)
 				break
@@ -448,9 +444,9 @@ render_bullets :: proc(world: ^World, assets: ^Assets, renderer: ^sdl.Renderer) 
 
 render_bacteria :: proc(world: ^World, assets: ^Assets, renderer: ^sdl.Renderer) {
 	for i in 0 ..< MAX_ENEMIES {
-		if !world.bacteria.hot[i].active do continue
+		if !world.level.bacteria.hot[i].active do continue
 
-		hot := world.bacteria.hot[i]
+		hot := world.level.bacteria.hot[i]
 
 		def := get_bacteria_def(hot.species)
 		texture := assets.bacteria[hot.species]
