@@ -159,7 +159,7 @@ world_update :: proc(game: ^Game, keystate: [^]u8, delta_time: f32) {
 		player_fire_bullet(&game.world.player, &game.world.bullets, keystate)
 		bullet_update(&game.world.bullets, delta_time)
 		bacteria_update(&level.bacteria, delta_time, game.world.player.x)
-		collision_update(&game.world.bullets, &level.bacteria)
+		collision_update(&game.world.bullets, level)
 		if level.wave_index < level.wave_count {
 			wave_update(&game.world.level.wave[level.wave_index], &level.bacteria, delta_time)
 			wave_dive_update(&game.world.level.wave[level.wave_index], &level.bacteria, delta_time)
@@ -202,7 +202,8 @@ game_handle_events :: proc(game: ^Game, event: ^sdl.Event, running: ^bool) {
 	}
 }
 
-collision_update :: proc(bullet: ^Bullets, bacteria: ^Bacteria) {
+collision_update :: proc(bullet: ^Bullets, level: ^Level) {
+	bacteria := &level.bacteria
 	for i := bullet.count - 1; i >= 0; i -= 1 {
 		for j in 0 ..< MAX_ENEMIES {
 			hot := &bacteria.hot[j]
@@ -221,8 +222,26 @@ collision_update :: proc(bullet: ^Bullets, bacteria: ^Bacteria) {
 			if collision {
 				hot.health -= calculate_bullet_damage(weapon_def^, bacteria_def^)
 				if hot.health <= 0 {
+					owner := cold.wave_index
 					hot.active = false
 					cold.wave_index = OWNER_NONE
+					if owner >= 0 && owner < level.wave_count {
+						level.wave[owner].destroyed_count += 1
+						wave := level.wave[owner]
+						fmt.printfln(
+							"kill: wave=%v destroyed=%v/%v resolved=%v",
+							wave.index,
+							wave.destroyed_count,
+							wave.spawn_count,
+							wave_resolved(&wave),
+						)
+					} else {
+						fmt.printfln(
+							"kill: invalid ownder %v (wave_count %v)",
+							owner,
+							level.wave_count,
+						)
+					}
 				}
 				bullet_remove(bullet, i)
 				break
