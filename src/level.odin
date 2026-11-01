@@ -144,7 +144,7 @@ level_init :: proc(bacteria: ^Bacteria, level: ^Level, master_seed: u64, level_n
 		if band == 0 {
 			jitter = 0
 		} else {
-			jitter = rand.int_range(-band, band, jitter_rng)
+			jitter = rand.int_range(-band, band + 1, jitter_rng)
 		}
 
 		share = clamp(share + jitter, WAVE_ENEMY_FLOOR, MAX_ENEMIES)
@@ -255,22 +255,22 @@ wave_count_picker :: proc(level: int, wave_rng: runtime.Random_Generator) -> int
 		if 1 == min(level, 4) {
 			return 1
 		}
-		return rand.int_range(1, min(level, 4), wave_rng)
+		return rand.int_range(1, min(level, 4) + 1, wave_rng)
 	}
 	min := 1 + block_number * 2
 	max := min + 3
-	if min > MAX_WAVES && max > MAX_WAVES {
+	if min > MAX_WAVES {
 		return MAX_WAVES
 	}
-	if max > MAX_WAVES {
-		return rand.int_range(min, MAX_WAVES, wave_rng)
+	if max >= MAX_WAVES {
+		return rand.int_range(min, MAX_WAVES + 1, wave_rng)
 	}
-	return rand.int_range(min, max, wave_rng)
+	return rand.int_range(min, max + 1, wave_rng)
 }
 
 threshold_picker :: proc(level: int, wave_rng: runtime.Random_Generator) -> int {
 	t := clamp(f32(level - 1) / 20, 0, 1)
 	base := 500 + 225 * (1 + math.cos(math.PI * t))
-	spread := f32(rand.int_range(-50, 50, wave_rng))
+	spread := f32(rand.int_range(-50, 51, wave_rng))
 	return int(clamp(base + spread, 500, 1000))
 }

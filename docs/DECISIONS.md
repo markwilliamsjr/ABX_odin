@@ -136,8 +136,8 @@ levels are heavily seed-sensitive.
 - **Entry point**: levels 1–2 pin entry to top-center (`ENTRY_POINTS[2]`); levels
   3+ draw from the full set.
 
-Collapsed ranges return their single value without drawing, because
-`rand.int_range` panics unless `lo < hi`. See Consequences.
+Ranges are drawn inclusively; see "Range semantics". The earlier exclusive
+behaviour is superseded.
 
 ### Reason
 
@@ -161,11 +161,11 @@ the generator would add a second code path for the same outcome.
   formation, same top-center entry. Its `threshold_permille` still varies over
   900–999, but that is unobservable: a five-enemy wave crosses every threshold in
   that band only at full destruction.
-- Degenerate ranges return their single value without drawing. `rand.int_range`
-  panics unless `lo < hi`, so the block-0 level-1 case, the band-0 jitter, and the
-  `MAX_WAVES` saturation are all guarded. This supersedes the earlier statement
-  that such draws still consume their triple: skipping is harmless because every
-  draw site owns a throwaway RNG, and the triple still belongs to that decision.
+- Degenerate ranges no longer arise from the count draws: under inclusive
+  semantics the upper bound is always above the lower. Guards that existed only
+  to avoid a panic are therefore redundant. The band-0 jitter still skips its
+  draw because zero jitter is the rule, not because the range is empty;
+  skipping remains harmless because every draw site owns a throwaway RNG.
 - The floor/budget overrun is confined to levels 4, 6 and 7.
 - Level 5 to 6 has a structural discontinuity: the maximum rises 4 to 6 while the
   minimum jumps 1 to 3. It is inherited from block-based ranges, not introduced by
@@ -192,27 +192,63 @@ two, level 3 one to three, levels 4–5 one to four. Adjacent blocks overlap by
 two values, so escalation is non-decreasing rather than strictly increasing.
 `MAX_WAVES` is 10.
 
-Because `rand.int_range` is exclusive at the upper bound, the current draws are
-one short of this table: block 0 gives L1 = 1, L2 = 1, L3 = 1–2, L4–5 = 1–3;
-block 1 gives 3–5; block 2 gives 5–7; block 3 gives 7–9; block 4 gives 9 only;
-block 5+ returns 10. This is the range-semantics open question, not a second
-design.
+## Range semantics
 
-### Open questions (not yet decided)
+### Decision
 
-- **Is `rand.int_range` treated as inclusive or exclusive?** The documented
-  ranges and the count jitter assume inclusive. Either pass `hi + 1` (and
-  `band + 1` for jitter), or accept exclusive ranges and rewrite the tables. Do
-  not encode the current behaviour in tests before this is settled.
+Ranges are inclusive, and the documented ranges are the source of truth.
+Odin's `rand.int_range` is exclusive at the upper bound, so every draw site
+passes `hi + 1` rather than rewriting the range to match the API. This covers
+the block-0 wave count, the block 1+ wave count, the per-wave count jitter, and
+the flee-threshold spread.
+
+### Reason
+
+The wave-count table, the count jitter, and the threshold spread were all
+written as if the range were inclusive. Treating the table as the specification
+keeps one description of intended behaviour instead of two.
+
+The jitter made the cost visible: `int_range(-band, band)` with `band = 1`
+produced only `-1` and `0`, so block 1+ waves were systematically smaller than
+designed rather than merely short at the upper edge.
+
+### Consequences
+
+- Every draw of this kind adds one to its upper bound. A draw that keeps the
+  API's native exclusive bound is now a bug, not a style choice.
+- The `MAX_WAVES` clamp is applied before the `+1`, or a saturated block draws
+  one past the cap. Block 3 is the boundary case: its raw maximum equals
+  `MAX_WAVES`, so the clamped path has to trigger on `>=`, not `>`, or it falls
+  through to the unclamped draw. Block 3 draws 7–10, block 4 9–10, and block 5+
+  returns 10.
+- Guards that existed only to avoid an `int_range` panic on a collapsed range
+  are no longer required, because the upper bound is always above the lower.
+  The level-1 shortcut is retained anyway; it is redundant but harmless, and it
+  keeps level 1 from drawing a value it cannot use. The band-0 jitter still
+  skips its draw, because zero jitter is the rule.
+- The flee-threshold spread is symmetric ±50 again, superseding the `[-50, 49]`
+  note under "Flee threshold".
+- Regenerating an existing seed produces different wave counts and jitters than
+  before. The budget-sum invariants are unaffected; empirical distributions
+  must be re-derived rather than assumed.
 
 ## Wave resolution and membership
 
 ### Decision
 
-Wave membership is carried by the bacterium, not by the wave. Each wave receives
-a unique ID at `wave_init`; each spawned bacterium stores the ID of its owning
-wave and clears it when it leaves play. `Wave.enemy_indices` is removed once the
+Wave membership is carried by the bacterium, not by the wave. The `Bacteria`
+pool lives inside `Level`, so a level is the scope in which membership is
+meaningful. Each wave stores its own index, set at `wave_init`; each spawned
+bacterium stores that index and clears it when it leaves play. A wave's
+level-qualified identity is `(level_number, wave_index)`, derived where needed
+rather than stored on the bacterium. `Wave.enemy_indices` is removed once the
 formation check and diver selection stop reading it.
+
+Ownership is its own invariant, not a cached view of `hot.active`. The sentinel
+is `-1`, because wave index 0 is a valid owner. `level_init` resets the pool by
+zeroing it and then writing the sentinel into every ownership slot, so a
+recycled slot cannot inherit the previous occupant's owner. Death and fleeing
+both clear ownership as part of leaving play.
 
 Each wave tracks two counters: `destroyed_count` and `fled_count`. The resolved
 count is their sum; there is no third field. Death increments destroyed.
@@ -237,8 +273,8 @@ advances `wave_index` exactly once per completed wave. When `wave_index` reaches
 the actual transition.
 
 Deaths are attributed at the moment health reaches zero, not by a later scan of
-a slot array. The collision path receives the level, or an equivalent owner
-lookup, so the kill increments the owning wave directly.
+a slot array. The collision path receives the level, so the kill increments the
+owning wave directly.
 
 Wave resolution is split into two steps. This step lands ownership, counters,
 the crossing test, completion, and advancement. Crossing the threshold sets and
@@ -253,6 +289,24 @@ a slot as soon as its occupant dies, so one index can describe two different
 bacteria within the same wave, and dead indices remain in the array. A count
 derived from it is unsound even before returning bacteria exist. Ownership is the
 smallest identity that survives recycling.
+
+The pool belongs to the level because the level is its lifetime: bacteria do not
+survive a transition, while what does — the master seed, the game state and the
+pending roster — already lives on `World`. That makes `level_init` the single
+reset authority, which matters because a forgotten reset is silent: a stale
+owner makes the formation check and diver count see a bacterium that is not in
+the wave.
+
+Ownership is stated separately from `active` so that "this bacterium belongs to
+this wave" has exactly one authority. If ownership were derived from `active`,
+every scan would need both flags, and any code that wrote one without the other
+would become a latent correctness bug instead of a visible inconsistency.
+
+The stored index is the wave's position in the level, not a composite
+`(level, wave)` value, because the pool is level-scoped: only one level's
+bacteria exist at a time. A composite would duplicate the level number on every
+bacterium and create a second source of truth for which level the pool belongs
+to.
 
 Two counters keep the threshold meaningful. Fleeing must resolve a wave without
 counting as destruction; one combined counter would make the fraction destroyed
@@ -276,15 +330,28 @@ The crossing branch is the only part that changes in 1.3.
 
 - Ownership lives on `BacteriaCold` beside `bacteria_state`; it is identity, not
   per-frame transform data.
-- Wave IDs are derived from level number and wave index rather than a run-wide
-  counter, so no extra state is threaded through transitions.
+- Wave identity is the level number plus the wave's stored index rather than a
+  run-wide counter, so no extra state is threaded through transitions. The
+  bacterium stores only the index; the level is implicit in the `Level` that
+  owns the pool.
+- `Bacteria` moves from `World` to `Level`. Update, collision, rendering and the
+  overlay read it through the level, and `Level_Transition` resets per-level
+  runtime by re-running `level_init` rather than reaching into `World`.
+- The wave index is stored on the wave so scans and logs do not need it passed
+  alongside the wave pointer. Array position remains the lookup for advancement;
+  the stored index is identity. Both are assigned together in `wave_init`.
 - `enemy_indices` is deleted. The formation check, diver count, and diver
-  selection scan the pool for active bacteria owned by the wave.
+  selection scan the pool for bacteria owned by the wave; ownership alone
+  answers membership, and `active` remains the render/update gate.
+- Because `-1` is the sentinel and `0` is a valid owner, a zeroed
+  `BacteriaCold` is not a valid "not in play" state. The sentinel pass is part
+  of the reset, not an optimisation after it.
 - `fled_count` stays zero until 1.3, so threshold crossing is observable only in
   logs during 1.2.
-- `wave_init` must reset `spawn_count`, `spawn_index`, timers,
-  `formation_complete`, `formation_complete_time`, `threshold_crossed`, and both
-  counters. `level_init` must reset `level_end` as well as `wave_index`.
+- `wave_init` must assign the wave's stored index and reset `spawn_count`,
+  `spawn_index`, timers, `formation_complete`, `formation_complete_time`,
+  `threshold_crossed`, and both counters. `level_init` must reset `level_end`,
+  `wave_index`, and the bacteria pool (zero, then the sentinel pass).
 - A failed `bacteria_spawn` must not increment `spawn_count`; otherwise the wave
   carries a phantom member that can never resolve.
 - A formation that places fewer bacteria than `enemy_count` would prevent
@@ -495,9 +562,8 @@ early levels and make the coin flip one-sided.
 - The 500 floor and the `/20` span were picked for shape, not balance, and are
   expected to be tuned in play.
 - `WaveParams.threshold` has been removed; the seed is the only source.
-- Under exclusive `rand.int_range`, the spread draw is `[-50, 49]`, not a
-  perfectly symmetric ±50. This follows the range-semantics decision under
-  "Early-level determinism".
+- The spread is the inclusive range ±50, matching the decision text above. The
+  earlier `[-50, 49]` behaviour is superseded by "Range semantics".
 - Per-wave sizes are roughly 3–6 under the budget split, so one kill is
   167–333 permille and crossings are coarse. The old table written against
   `3 + level*2` per wave is superseded and removed; the curve's shape is

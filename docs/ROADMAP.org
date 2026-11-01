@@ -14,9 +14,6 @@ when the one before it is verified.
 
 Decide each before writing the code that depends on it.
 
-- [ ] **Range semantics** — treat ~rand.int_range~ as inclusive (pass ~hi + 1~)
-      or exclusive (rewrite the documented ranges)? Blocks 1.1 and the
-      wave-count verification.
 - [ ] **Does the flee threshold scale with buff count?** Blocks 1.3.
 - [ ] **Frenzied stacking** — additive-with-cap or free multiplication? Blocks
       buff tuning, not implementation.
@@ -30,23 +27,28 @@ Finish level advancement and transition, plus the minimum needed to observe it.
 
 *** 1.1 Settle range semantics
 
-- [ ] Choose inclusive or exclusive ~rand.int_range~ and apply it to
-      ~wave_count_picker~ and the count jitter.
-- [ ] Update the documented wave-count ranges to match the decision.
+Inclusive ranges were chosen on 2026-10-31: the documented ranges stand, and
+~hi + 1~ moves into the draw sites. See
+[[file:DECISIONS.md::Range semantics][Range semantics]].
+
+- [X] Decide inclusive ~rand.int_range~ with ~hi + 1~ at every draw site.
+- [X] Apply the ~+1~ to ~wave_count_picker~, the count jitter, and
+      ~threshold_picker~; clamp ~MAX_WAVES~ before the ~+1~.
+- [X] Confirm the documented wave-count ranges match the decision.
 
 *** 1.2 Wave membership and resolution
 
 Ownership, counters, crossing detection, and advancement. The flee response is
 1.3. Full detail: [[file:DECISIONS.md::Wave resolution and membership][Wave resolution and membership]].
 
-- [ ] Give each wave a unique ID and each bacterium an owner; clear ownership
-      when it leaves play.
+- [ ] Move the ~Bacteria~ pool into ~Level~; store the index on ~Wave~ and the
+      owning wave index on ~BacteriaCold~; clear ownership when it leaves play.
 - [ ] Replace the formation, diver-count, and diver-selection scans with owner
       scans; delete ~enemy_indices~.
 - [ ] Add ~destroyed_count~ and ~fled_count~ to ~Wave~; derive ~resolved~ as
       their sum.
 - [ ] Reset counters, timers, flags, and level state in ~wave_init~ and
-      ~level_init~.
+      ~level_init~, including the pool's zero-then-sentinel pass.
 - [ ] Attribute deaths to the owning wave at health zero.
 - [ ] Do not count a failed spawn; retry it, and guard the formation-shortfall
       case.

@@ -2,7 +2,7 @@
 
 ## Date
 
-2026-10-31 (last implementation 2026-10-26; planning 2026-10-24)
+2026-10-31 (last implementation 2026-10-26; decisions 2026-10-31)
 
 ## Goal
 
@@ -30,10 +30,23 @@ The 2026-10-31 session restructured the docs only: `ROADMAP.org` now lists
 remaining work; rationale moved to `DECISIONS.md`, intended design to
 `ARCHITECTURE.md`, and current state to `PROJECT.md`. No source files changed.
 
+The same day's decision session settled two more questions without changing
+source:
+
+- **Range semantics** are inclusive: every draw passes `hi + 1`. The documented
+  ranges are the source of truth; the exclusive upper bound is an API detail.
+- **Wave membership**: the `Bacteria` pool moves into `Level`, each `Wave` gets
+  a stored index, and each bacterium stores its owning wave index with `-1` as
+  the not-in-play sentinel. Ownership is an independent invariant, and
+  `level_init` zeroes the pool and then writes the sentinel into every slot.
+
+Only `DECISIONS.md` and this session file changed; no source files were touched.
+
 ## Current code state
 
 `odin check src` was clean at the end of the implementation session. Runtime
-verification numbers are still not recorded.
+verification numbers are still not recorded. The range and ownership decisions
+are not implemented yet.
 
 Two issues recorded in earlier sessions are fixed in the current source: the
 wave guard uses `<` and `wave_dive_update` is guarded, and the overlay
@@ -41,38 +54,38 @@ consistently reads `wave[wave_index]`.
 
 ## Current task
 
-Wave Resolution. Nothing currently detects that a wave has finished.
+Wave Resolution. The membership model is decided but not implemented; nothing
+currently detects that a wave has finished.
 
 ## Next step
 
-Decide wave membership tracking before writing resolution logic. The current
-`enemy_indices` array can contain duplicate slot indices within one wave,
-because `find_free_bacteria_slot` recycles slots when bacteria die before later
-spawns. Counting resolved bacteria from that array is therefore unsound today.
-
-Options are to give each bacterium its owning wave identity (for example
-`wave_index` plus level number on `BacteriaHot`) so kills can be attributed at
-the moment `active` flips, or to introduce a separate membership structure. Then:
-destroyed counter, crossing test, resolved counter, wave completion, and finally
-advancing `wave_index`.
+Implement 1.1 first: pass `hi + 1` at the four draw sites, clamp `MAX_WAVES`
+before the `+1`, and leave the documented table unchanged. Then begin 1.2 with
+ownership as a behaviour-neutral step: move `Bacteria` into `Level`, store the
+index on `Wave`, store the owning index on `BacteriaCold`, clear it on death and
+flee, replace the `enemy_indices` scans, and delete the array. Counters,
+crossing, completion, and advancement follow as separate steps.
 
 ## Open issues
 
-- `rand.int_range` is `[lo, hi)`, so wave counts and jitter are one short of the
-  documented ranges. Decide inclusive vs exclusive before writing tests. See
-  `DECISIONS.md` "Early-level determinism".
 - `Level.end_chance` and `Level.level_end` are unread. `end_chance` is
   superseded by the rolled flee threshold.
-- `threshold_picker`'s spread draws `[-50, 49]`, not symmetric ±50.
 - `--no-vsync` is parsed but never read; the renderer always enables vsync.
 - `species_unlocked` is computed but never read; `bacteria_spawn` hardcodes
   `.Strep`.
 - Decisions still read wall-clock time: `formation_complete_time`, the dive
   gate, and `delta_time`.
+- A zeroed `BacteriaCold` is not a valid "not in play" state, because `0` is a
+  valid wave index. The `level_init` reset must include the `-1` sentinel pass.
+- The spawn-region walk in `wave_update` is unbounded: if `generate_formation`
+  places fewer than `enemy_count`, it can index past `MAX_REGIONS`.
+- The debug overlay reads `wave[wave_index]` unconditionally; once advancement
+  can set `wave_index == wave_count`, it will read an uninitialised wave.
 
 ## Verification to record
 
-Not yet recorded. The expected values:
+Not yet recorded. The expected values assume the inclusive range semantics
+settled on 2026-10-31:
 
 - level 1: one wave, 5 enemies, no jitter, top-center entry across seeds
 - level 20: shares sum to 43
