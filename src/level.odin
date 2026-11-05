@@ -279,6 +279,31 @@ wave_dive_update :: proc(wave: ^Wave, bacteria: ^Bacteria, delta_time: f32) {
 	}
 }
 
+wave_resolution_update :: proc(level: ^Level) {
+	if level.wave[level.wave_index].spawn_finished &&
+	   level.wave[level.wave_index].spawn_count > 0 &&
+	   wave_resolved(&level.wave[level.wave_index]) == level.wave[level.wave_index].spawn_count {
+		fmt.printfln(
+			"[wave %v] resolved: destroyed=%v/%v; fled=%v",
+			level.wave_index,
+			level.wave[level.wave_index].destroyed_count,
+			level.wave[level.wave_index].spawn_count,
+			level.wave[level.wave_index].fled_count,
+		)
+		level.wave_index += 1
+		fmt.printfln(
+			"[wave %v] advance: next=%v; wave_count=%v",
+			level.wave_index,
+			level.wave_index,
+			level.wave_count,
+		)
+		if level.wave_index == level.wave_count {
+			level.level_end = true
+			fmt.printfln("[level %v] end: waves=%v", level.level_number, level.wave_count)
+		}
+	}
+}
+
 // ---- Helper ----
 
 generate_entry_points :: proc(

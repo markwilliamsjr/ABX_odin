@@ -163,6 +163,7 @@ world_update :: proc(game: ^Game, keystate: [^]u8, delta_time: f32) {
 		if level.wave_index < level.wave_count {
 			wave_update(&game.world.level.wave[level.wave_index], &level.bacteria, delta_time)
 			wave_dive_update(&game.world.level.wave[level.wave_index], &level.bacteria, delta_time)
+			wave_resolution_update(&game.world.level)
 		}
 	case .Level_Transition:
 	case .Paused:
