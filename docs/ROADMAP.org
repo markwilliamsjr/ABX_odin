@@ -52,14 +52,14 @@ Ownership, counters, crossing detection, and advancement. The flee response is
 - [X] Attribute deaths to the owning wave at health zero.
 - [X] Do not count a failed spawn; retry it, and guard the formation-shortfall
       case.
-- [ ] Once spawning completes, apply
+- [x] Once spawning completes, apply
       ~destroyed_count * 1000 >= spawn_count * threshold_permille~ and set
       ~threshold_crossed~ once.
-- [ ] Resolve dead, fled, and still-alive explicitly; complete the wave when
+- [x] Resolve dead, fled, and still-alive explicitly; complete the wave when
       ~resolved == spawn_count~.
-- [ ] Advance ~wave_index~ once per completed wave; set ~Level.level_end~ when
+- [x] Advance ~wave_index~ once per completed wave; set ~Level.level_end~ when
       it reaches the level's wave count.
-- [ ] Add temporary wave logs: init, crossing, resolution, advancement, level
+- [x] Add temporary wave logs: init, crossing, resolution, advancement, level
       end.
 
 *** 1.3 Fleeing and returning
