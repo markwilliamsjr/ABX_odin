@@ -38,6 +38,10 @@ Implemented:
   count jitter; `wave_index`; all drawn waves initialized at level start. Each
   wave stores its own index, and the formation, diver-count, and diver-selection
   scans find members by ownership rather than by a slot list.
+- **Wave accounting.** `destroyed_count` and `fled_count` per wave, attributed
+  at the moment of death; `resolved` is their sum. Spawning reports
+  `spawn_finished` when the budget is filled or the regions run out, so a
+  shortfall wave still forms up rather than stalling.
 - **Procedural generation.** Seed derivation, entry-point selection, formation
   bounds, line formation layout, and entry paths. Entry is pinned to top-center
   for levels 1–2.
@@ -52,8 +56,8 @@ Implemented:
 
 Not yet implemented:
 
-- Wave resolution, wave completion, and `wave_index` advancement. Destroyed and
-  fled counts do not exist yet, so the flee threshold is still unconsumed.
+- Threshold crossing, wave resolution, wave completion, and `wave_index`
+  advancement. The counters exist but nothing consumes them yet.
 - Fleeing, returning bacteria, the pending roster, and resistance buffs.
 - Real `Level_Transition` logic.
 - Clay UI, settings, skill tree, bosses, and adaptive wave composition.

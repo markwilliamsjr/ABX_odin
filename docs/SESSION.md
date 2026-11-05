@@ -2,7 +2,7 @@
 
 ## Date
 
-2026-11-01 (ownership slice; earlier implementation and decisions 2026-10-31)
+2026-11-05 (counters and spawn-bound slice 2026-11-01; earlier work 2026-10-31)
 
 ## Goal
 
@@ -79,11 +79,38 @@ Diving did not work after the first pass: both new owner scans had the skip test
 inverted (`==` instead of `!=`), so `select_first_found` rejected the wave's own
 bacteria and returned `-1`. Fixing both restored diving.
 
+The counters and spawn-bound slice followed, committed as `b2c7ca5`:
+
+- `destroyed_count` and `fled_count` on `Wave`, with `wave_resolved` returning
+  their sum. No stored `resolved` field.
+- `collision_update` takes `^Level`. A kill captures `cold.wave_index` before
+  clearing `active` and the owner, bound-checks the owner against `wave_count`,
+  and increments the owning wave. A per-kill log line is in place.
+- `wave_init` now owns its reset: `spawn_count`, `spawn_index`, `spawn_region`,
+  `spawn_timer`, `dive_timer`, `formation_complete_time`, `destroyed_count`,
+  `fled_count`, `threshold_crossed`, `formation_complete`, `spawn_finished`.
+  `level_init` zeroes `level.wave` before the wave loop and sets
+  `level_end = false`.
+- `spawn_finished` separates "spawning is done" from "the budget was filled".
+  It is set when `spawn_count == enemy_count` or when the region walk runs out
+  of regions. `Wave.region_count` stores the bound the walk was missing.
+- The formation check gates on `spawn_finished` rather than on
+  `spawn_count == enemy_count`, so a shortfall wave can still form up.
+
+The first attempt at the spawn bound was inert: `wave_init` never stored
+`region_count`, and the exhaustion test used `>` where the walk guarantees
+`==`. The two bugs masked each other and only showed on the shortfall path.
+
 ## Current code state
 
-`odin check src` is clean with 1.1 and the ownership slice in place. The
-ownership decision is implemented; counters, crossing, completion, and
-advancement are not. Runtime verification numbers are still not recorded.
+`odin check src` is clean with 1.1, the ownership slice, the counters, and the
+spawn bound in place. Ownership, counters, resets, and shortfall handling are
+implemented; crossing, resolution, completion, and advancement are not. Runtime
+verification numbers are still not recorded.
+
+The shortfall log is the one gap on the spawn side: the exhaustion branch sets
+`spawn_finished` without printing anything, so a shortfall is indistinguishable
+from a normal wave at the keyboard.
 
 Two issues recorded in earlier sessions are fixed in the current source: the
 wave guard uses `<` and `wave_dive_update` is guarded, and the overlay
@@ -91,25 +118,23 @@ consistently reads `wave[wave_index]`.
 
 ## Current task
 
-Roadmap 1.2, counters and death attribution. Ownership exists, but nothing
-detects that a wave has finished; `wave_index` is still pinned at 0.
+Roadmap 1.2, crossing detection. The counters are trustworthy and spawning
+terminates, but nothing compares `destroyed_count` to `threshold_permille` yet,
+and `wave_index` is still pinned at 0.
 
 ## Next step
 
-Land the counters without any transition logic, so the numbers can be observed
-in isolation:
+- add the shortfall log in the exhaustion branch (one line, fires once because
+  `spawn_finished` short-circuits the block afterwards)
+- apply `destroyed_count * 1000 >= spawn_count * threshold_permille` once
+  `spawn_finished`, setting `threshold_crossed` exactly once, with a log on the
+  transition
+- then resolution, completion, advancement, and the remaining lifecycle logs
 
-- add `destroyed_count` and `fled_count` to `Wave`, plus a `resolved` helper
-  returning their sum
-- pass the owning wave (or the `Level`) into `collision_update` and increment
-  `destroyed_count` in the branch that already clears `active` and the owner
-- log the increment; a five-enemy wave should log five destructions and reach
-  `resolved == spawn_count` with `wave_index` unchanged
-
-Crossing, completion, and advancement follow as separate steps. Keep the
-`wave_init` reset of counters, timers, and flags with the crossing step, since
-`level_init` currently re-runs `wave_init` over every wave it will use and that
-masks a missing reset rather than proving one.
+The zero-spawn question is still open: a wave whose formation placed nothing
+has `spawn_count == 0`, so `resolved == spawn_count` is true immediately. Decide
+whether that completes as a no-op or stalls visibly before writing the
+completion test.
 
 The formation check is the one scan that is not fully behaviour-neutral: it
 used to walk `0..<spawn_count` over `enemy_indices`, including dead and recycled
@@ -125,15 +150,31 @@ verify it.
   `.Strep`.
 - Decisions still read wall-clock time: `formation_complete_time`, the dive
   gate, and `delta_time`.
-- `wave_init` does not reset `spawn_count`, `spawn_index`, timers, or the
-  formation and crossing flags. It only works because `level_init` re-inits
-  every wave it will use.
-- The spawn-region walk in `wave_update` is unbounded: if `generate_formation`
-  places fewer than `enemy_count`, it can index past `MAX_REGIONS`.
 - The debug overlay reads `wave[wave_index]` unconditionally; once advancement
-  can set `wave_index == wave_count`, it will read an uninitialised wave.
+  can set `wave_index == wave_count`, it will read an uninitialised wave. The
+  guard has to land in the same commit as advancement.
+- `wave_init` writes `region_enemy_count[i] = result.placed` for every region,
+  i.e. the full total into each. Correct while `compute_formation_bounds`
+  returns 1; wrong when it returns more.
+- `wave_init` assigns `spawn_region = 0` twice. Harmless, but it shows the reset
+  block was edited piecemeal.
 
 ## Verification to record
+
+Counters slice: not yet recorded. The checks that prove the increment is
+attributed once and to the right wave:
+
+- kill one bacterium → `destroyed_count == 1`, `fled_count == 0`,
+  `resolved == 1`
+- two bullets into the same bacterium in one frame → still 1
+- kill one, let the wave respawn into the freed slot, kill that → 2
+  (the recycled-slot case the old index array got wrong)
+- kill a whole wave → `destroyed_count == spawn_count`
+- same seed twice → the same counts at the same points
+
+Spawn bound: forcing `region_enemy_count[0] = 2` with `enemy_count == 5` should
+give two spawns, `spawn_finished == true`, `spawn_count == 2`, and no read of
+region 1. Not yet run.
 
 Ownership slice: diving works after the inverted owner scans were fixed. Still
 to record are the checks that separate "it runs" from "ownership is correct":
@@ -158,6 +199,20 @@ range semantics settled on 2026-10-31:
 - seed-collision check across a level's waves
 - once resolution exists: same seed twice gives identical wave composition,
   formations, flee thresholds, and return schedules
+
+## Problems discovered in the counters and spawn-bound slice
+
+- **An unassigned bound.** `wave_init` computed `region_count` for the entry
+  loop and never stored it on the wave. The walk's bound was therefore `0`, so
+  the loop body never ran and the exhaustion branch never fired. The guard was
+  inert in exactly the case it existed for.
+- **`>` where the walk guarantees `==`.** Exhaustion is `spawn_region ==
+  region_count`; testing `>` fell through to the spawn branch and read region
+  `region_count`, which is outside the filled regions.
+- The two masked each other: with `region_count == 0` the bad comparison was
+  unreachable, and with the comparison fixed the missing assignment would have
+  read past the filled regions instead. A guard that never executes is not
+  tested by playing the game normally; it has to be forced.
 
 ## Problems discovered in the ownership slice
 

@@ -45,12 +45,12 @@ Ownership, counters, crossing detection, and advancement. The flee response is
       owning wave index on ~BacteriaCold~; clear ownership when it leaves play.
 - [X] Replace the formation, diver-count, and diver-selection scans with owner
       scans; delete ~enemy_indices~.
-- [ ] Add ~destroyed_count~ and ~fled_count~ to ~Wave~; derive ~resolved~ as
+- [X] Add ~destroyed_count~ and ~fled_count~ to ~Wave~; derive ~resolved~ as
       their sum.
-- [ ] Reset counters, timers, flags, and level state in ~wave_init~ and
+- [X] Reset counters, timers, flags, and level state in ~wave_init~ and
       ~level_init~, including the pool's zero-then-sentinel pass.
-- [ ] Attribute deaths to the owning wave at health zero.
-- [ ] Do not count a failed spawn; retry it, and guard the formation-shortfall
+- [X] Attribute deaths to the owning wave at health zero.
+- [X] Do not count a failed spawn; retry it, and guard the formation-shortfall
       case.
 - [ ] Once spawning completes, apply
       ~destroyed_count * 1000 >= spawn_count * threshold_permille~ and set

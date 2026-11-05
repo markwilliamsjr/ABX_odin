@@ -193,6 +193,13 @@ wave_update :: proc(wave: ^Wave, bacteria: ^Bacteria, delta_time: f32) {
 		}
 		if wave.spawn_region == wave.region_count {
 			wave.spawn_finished = true
+			fmt.printfln(
+				"[wave %v] spawn shortfall: %v/%v spawned, %v region(s) exhausted",
+				wave.index,
+				wave.spawn_count,
+				wave.enemy_count,
+				wave.region_count,
+			)
 		} else {
 			start := wave.region_start[wave.spawn_region]
 			destination := wave.formation_positions[wave.spawn_region][wave.spawn_index]
@@ -213,6 +220,18 @@ wave_update :: proc(wave: ^Wave, bacteria: ^Bacteria, delta_time: f32) {
 			if wave.spawn_count == wave.enemy_count {
 				wave.spawn_finished = true
 			}
+		}
+	}
+	if !wave.threshold_crossed && wave.spawn_finished && wave.spawn_count > 0 {
+		if wave.destroyed_count * 1000 >= wave.spawn_count * wave.threshold_permille {
+			wave.threshold_crossed = true
+			fmt.printfln(
+				"[wave %v] threshold crossed: destroyed = %v/%v; permille = %v",
+				wave.index,
+				wave.destroyed_count,
+				wave.spawn_count,
+				wave.threshold_permille,
+			)
 		}
 	}
 
