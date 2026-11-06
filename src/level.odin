@@ -290,10 +290,11 @@ wave_resolution_update :: proc(level: ^Level) {
 			level.wave[level.wave_index].spawn_count,
 			level.wave[level.wave_index].fled_count,
 		)
+		done := level.wave_index
 		level.wave_index += 1
 		fmt.printfln(
 			"[wave %v] advance: next=%v; wave_count=%v",
-			level.wave_index,
+			done,
 			level.wave_index,
 			level.wave_count,
 		)

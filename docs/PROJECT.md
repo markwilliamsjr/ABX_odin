@@ -42,11 +42,16 @@ Implemented:
   at the moment of death; `resolved` is their sum. Spawning reports
   `spawn_finished` when the budget is filled or the regions run out, so a
   shortfall wave still forms up rather than stalling.
+- **Wave resolution.** The threshold test runs once spawning has finished, sets
+  `threshold_crossed`, and removes nothing yet. A wave completes when everything
+  that spawned has left play; `wave_index` then advances once, and the last wave
+  sets `level_end`. The transition itself is still 1.5.
 - **Procedural generation.** Seed derivation, entry-point selection, formation
   bounds, line formation layout, and entry paths. Entry is pinned to top-center
   for levels 1–2.
 - **Flee threshold.** Rolled once per wave from the wave seed, held as
-  per-mille destroyed, and shown in the debug overlay. Nothing consumes it yet.
+  per-mille destroyed, shown in the debug overlay, and consumed by the crossing
+  test. The flee response is not implemented.
 - **App shell.** Menu, playing, and paused states; Esc pauses; `--debug` skips
   the menu. `Level_Transition` and `Game_Over` exist but do nothing.
 - **CLI.** `--debug`, `--seed`, `--level`, `--no-vsync`, and `--help`.
@@ -56,8 +61,6 @@ Implemented:
 
 Not yet implemented:
 
-- Threshold crossing, wave resolution, wave completion, and `wave_index`
-  advancement. The counters exist but nothing consumes them yet.
 - Fleeing, returning bacteria, the pending roster, and resistance buffs.
 - Real `Level_Transition` logic.
 - Clay UI, settings, skill tree, bosses, and adaptive wave composition.
