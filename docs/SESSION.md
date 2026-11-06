@@ -2,7 +2,8 @@
 
 ## Date
 
-2026-11-05 (counters and spawn-bound slice 2026-11-01; earlier work 2026-10-31)
+2026-11-06 (1.3 design settled; 1.2 complete 2026-11-05; earlier work 2026-11-01
+and 2026-10-31)
 
 ## Goal
 
@@ -101,65 +102,123 @@ The first attempt at the spawn bound was inert: `wave_init` never stored
 `region_count`, and the exhaustion test used `>` where the walk guarantees
 `==`. The two bugs masked each other and only showed on the shortfall path.
 
+The rest of 1.2 landed in `6d0d9ff` and `f7930ed`:
+
+- `wave_update` applies `destroyed_count * 1000 >= spawn_count *
+  threshold_permille` once `spawn_finished` and `spawn_count > 0`, sets
+  `threshold_crossed` once, and logs the transition. Crossing removes nothing;
+  `fled_count` stays zero.
+- `wave_resolution_update(level)` runs after the dive update and inside the
+  `wave_index < wave_count` guard. It completes the wave when `spawn_finished`,
+  `spawn_count > 0`, and `wave_resolved == spawn_count`, advances `wave_index`
+  once, and sets `level_end` when the new index reaches `wave_count`.
+- The pass logs resolution, advancement, and level end.
+- `debug.odin` clamps the displayed wave with
+  `min(wave_index, wave_count - 1)`, so the overlay keeps reading a valid wave
+  after the level ends.
+- The completion gate uses `spawn_finished`, not `spawn_count == enemy_count`,
+  so a shortfall wave crosses and completes against what actually spawned.
+  `DECISIONS.md` was amended to match.
+
+## 1.3 design decisions (2026-11-06)
+
+No source changed in this pass; these decisions are recorded in `DECISIONS.md`.
+
+- Flee threshold scales with the wave's highest buff count:
+  `clamp(base + 50 * max_buff_count, 500, 1000)`, recomputed at the crossing test.
+- Returning bacteria substitute into the next wave's existing spawn slots, FIFO,
+  returners first, overflow stays queued. The roster is on `World` and is not
+  cleared by `level_init`.
+- Buff scaffolding lands in 1.3: `BuffCategory`, the 5-slot array, `BUFF_DEFS`,
+  `max_health`, and a seeded roll. 1.4 becomes buff effects plus
+  `species_unlocked` wiring.
+- Buffs roll at flee and are stored on the roster entry. The seed is
+  `derive_seed(wave.seed, .Buff, slot_index)`. A sixth escape replaces the oldest
+  buff.
+- Fleeing is a zero-duration wave phase in 1.3. The wave is logically resolved at
+  crossing, collision ignores `.Fleeing`, and advancement waits for the phase.
+  The future animation only adds duration and motion.
+- `Level.flee_prohibited` skips the threshold draw and uses `1000`. It has no CLI
+  surface; verify with a temporary code edit.
+
 ## Current code state
 
-`odin check src` is clean with 1.1, the ownership slice, the counters, and the
-spawn bound in place. Ownership, counters, resets, and shortfall handling are
-implemented; crossing, resolution, completion, and advancement are not. Runtime
-verification numbers are still not recorded.
+`odin check src` is clean and roadmap 1.2 is implemented end to end: ownership,
+counters, spawn termination, crossing, completion, advancement, and `level_end`.
+`fled_count` is still always zero, and `level_end` is written but unread until
+`.Level_Transition` lands in 1.5.
 
-The shortfall log is the one gap on the spawn side: the exhaustion branch sets
-`spawn_finished` without printing anything, so a shortfall is indistinguishable
-from a normal wave at the keyboard.
+Runtime verification: the crossing checks were reported passing — boundary,
+set-once, shortfall denominator, and the zero-spawn guard. The resolution and
+advancement checks are not recorded.
 
 Two issues recorded in earlier sessions are fixed in the current source: the
-wave guard uses `<` and `wave_dive_update` is guarded, and the overlay
-consistently reads `wave[wave_index]`.
+wave guard uses `<` and `wave_dive_update` is guarded, and the overlay reads
+`wave[wave_index]` consistently and within bounds.
 
 ## Current task
 
-Roadmap 1.2, crossing detection. The counters are trustworthy and spawning
-terminates, but nothing compares `destroyed_count` to `threshold_permille` yet,
-and `wave_index` is still pinned at 0.
+Roadmap 1.3, fleeing and returning. The design is settled; implementation has not
+started. 1.2 is complete; 1.6 verification stays outstanding behind it.
 
 ## Next step
 
-- add the shortfall log in the exhaustion branch (one line, fires once because
-  `spawn_finished` short-circuits the block afterwards)
-- apply `destroyed_count * 1000 >= spawn_count * threshold_permille` once
-  `spawn_finished`, setting `threshold_crossed` exactly once, with a log on the
-  transition
-- then resolution, completion, advancement, and the remaining lifecycle logs
+Implement 1.3 in roadmap order: buff scaffolding and the `.Buff` seed, the roster
+on `World`, the flee-prohibited flag, the effective threshold, the zero-duration
+flee phase, roster scheduling and capacity, the return spawn path, then logs and
+verification.
 
-The zero-spawn question is still open: a wave whose formation placed nothing
-has `spawn_count == 0`, so `resolved == spawn_count` is true immediately. Decide
-whether that completes as a no-op or stalls visibly before writing the
-completion test.
-
-The formation check is the one scan that is not fully behaviour-neutral: it
-used to walk `0..<spawn_count` over `enemy_indices`, including dead and recycled
-slots. It now walks the live pool. "The game plays the same" therefore does not
-verify it.
+The existing crossing branch in `wave_update` is the only 1.3 seam.
+`Level.end_chance` still needs confirming and removing before 1.5.
 
 ## Open issues
 
-- `Level.end_chance` and `Level.level_end` are unread. `end_chance` is
-  superseded by the rolled flee threshold.
+- `Level.end_chance` is unread and superseded by the rolled flee threshold;
+  `Level.level_end` is written but unread until 1.5.
 - `--no-vsync` is parsed but never read; the renderer always enables vsync.
 - `species_unlocked` is computed but never read; `bacteria_spawn` hardcodes
   `.Strep`.
 - Decisions still read wall-clock time: `formation_complete_time`, the dive
   gate, and `delta_time`.
-- The debug overlay reads `wave[wave_index]` unconditionally; once advancement
-  can set `wave_index == wave_count`, it will read an uninitialised wave. The
-  guard has to land in the same commit as advancement.
 - `wave_init` writes `region_enemy_count[i] = result.placed` for every region,
   i.e. the full total into each. Correct while `compute_formation_bounds`
   returns 1; wrong when it returns more.
-- `wave_init` assigns `spawn_region = 0` twice. Harmless, but it shows the reset
-  block was edited piecemeal.
+- `wave_init` assigns `spawn_region = 0` twice.
 
 ## Verification to record
+
+1.3 flee and return: not yet run.
+
+- level 11: kill to the threshold; the remaining bacteria enter `.Fleeing`,
+  `fled_count` matches, but the wave advances only after the flee phase
+- returners appear first in the next wave, preserve species, and spawn with
+  restored health and their buff
+- a carried bacterium flees again: new buff, no escape counter; a sixth escape
+  replaces the oldest buff
+- a full roster drops the oldest; due overflow stays queued
+- flee-prohibited via temporary edit: no threshold draw, nothing flees, full
+  clear required
+- same seed twice: same thresholds, roster contents, and buff rolls
+- collision ignores `.Fleeing`; a fleeing bacterium cannot be killed or counted
+  twice
+
+1.2 crossing: reported passing.
+
+- boundary at the threshold fraction (cross at 3 of 5 for a 500-per-mille wave)
+- set-once: later kills do not re-log
+- shortfall wave: crossing uses `spawn_count` as the denominator, not
+  `enemy_count`
+- zero-spawn wave: no crossing, shortfall log only
+
+1.2 resolution and advancement: not recorded. The checks are
+
+- `--level 11`, five enemies: four destroyed logs the crossing but does not
+  advance; the fifth logs resolution and advancement
+- multi-wave level: one advancement per wave, `level_end` only after the last
+- no stranded bacteria when a wave is left partly alive at low threshold — this
+  is the check that separates completion from crossing
+- overlay with `--debug` after `level_end` reads a valid wave
+- same seed twice: advancement on the same frames
 
 Counters slice: not yet recorded. The checks that prove the increment is
 attributed once and to the right wave:
@@ -199,6 +258,19 @@ range semantics settled on 2026-10-31:
 - seed-collision check across a level's waves
 - once resolution exists: same seed twice gives identical wave composition,
   formations, flee thresholds, and return schedules
+
+## Problems discovered in the crossing and resolution slice
+
+- **Completion gated on crossing.** The first `wave_resolution_update` advanced
+  when `threshold_crossed` was set, not when `resolved == spawn_count`, so a wave
+  advanced with bacteria still alive and left them stranded in the pool, owned by
+  a wave that no longer existed. Level 1 hides this: its threshold is 900–1000,
+  so crossing and completion happen on the same kill. Any level with a real
+  threshold (11+) separates them.
+- **A log outside its condition.** The first resolution line was placed before
+  the predicate, so it printed every frame and buried the crossing and
+  advancement lines. A log that fires on every frame is worse than no log: it
+  looks like the channel works while the actual events scroll past.
 
 ## Problems discovered in the counters and spawn-bound slice
 

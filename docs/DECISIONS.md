@@ -257,15 +257,16 @@ Fleeing increments fled. Either one clears ownership.
 Wave resolution has three explicit cases: dead (resolved), fled (resolved and
 scheduled to return), and still alive (unresolved).
 
-The threshold test runs only after spawning has completed
-(`spawn_count == enemy_count`):
+The threshold test runs only after spawning has finished and the wave has at
+least one member:
 
 ```
+spawn_finished && spawn_count > 0 &&
 destroyed_count * 1000 >= spawn_count * threshold_permille
 ```
 
-It sets `threshold_crossed` once. A wave completes when spawning is complete and
-`resolved == spawn_count`.
+It sets `threshold_crossed` once. A wave completes when spawning has finished,
+`spawn_count > 0`, and `resolved == spawn_count`.
 
 The resolution pass runs after spawning and dive updates in the frame. It
 advances `wave_index` exactly once per completed wave. When `wave_index` reaches
@@ -318,6 +319,15 @@ it grows while spawning. Without the gate, one kill early in a wave can cross
 almost any threshold, and the rest of the wave's budget would be resolved away
 before it ever spawned.
 
+The gate is `spawn_finished`, not `spawn_count == enemy_count`. The equality means
+"the budget was filled", which is a different question and is unreachable when
+the formation cannot place the whole budget. `spawn_finished` means "no more
+bacteria will spawn", which is the property the denominator actually needs.
+
+The `spawn_count > 0` term keeps a degenerate wave inert. Without it, a wave that
+spawned nothing satisfies `0 >= 0` and completes on its first frame, hiding the
+generation bug that produced it.
+
 Attribution at the moment of death avoids an ordering dependency. A later scan
 would have to run before the next spawn recycles the slot; making that safe is
 more fragile than incrementing the owning wave at the kill site.
@@ -354,9 +364,11 @@ The crossing branch is the only part that changes in 1.3.
   `wave_index`, and the bacteria pool (zero, then the sentinel pass).
 - A failed `bacteria_spawn` must not increment `spawn_count`; otherwise the wave
   carries a phantom member that can never resolve.
-- A formation that places fewer bacteria than `enemy_count` would prevent
-  `spawn_count == enemy_count` forever. Bound the region walk and log it until a
-  policy exists.
+- A formation that places fewer bacteria than `enemy_count` no longer stalls.
+  `spawn_finished` is set when the region walk runs out, so a shortfall wave
+  still forms up, crosses, and completes against `spawn_count` — the count that
+  actually spawned, not the budget. `enemy_count` remains the intended budget and
+  is read only by the spawn check and the shortfall log.
 - `Level.level_end` is set but not consumed until 1.5. The existing
   `wave_index < wave_count` guard stops updates.
 - Temporary `fmt` logging is the verification channel until the Clay overlay
@@ -431,18 +443,19 @@ actually behave.
 
 The pending roster lives on `World` and **survives level transitions**.
 
-A bacterium that flees enters the queue and appears in the **next wave** — read as
-a queue position, not a per-level dump. If it flees again, it enters the wave
-after that. A level therefore never opens with a flood; the backlog arrives one
-wave at a time.
+A bacterium that flees enters the queue and is scheduled for the **next wave** —
+one queue step, not a per-level dump. If it flees again, it is scheduled one wave
+later again. The queue is FIFO. A level therefore never opens with a flood; the
+backlog arrives one wave at a time.
 
 Carried bacteria **may flee again**, rolling a fresh buff and receiving a fresh
 health restore each time. There is no escape counter.
 
 At a **boss level, all bacteria must be destroyed** before the player can advance.
 Bosses are the pressure valve for the roster: fleeing is not permitted there, so a
-fully-stacked bacterium must finally be killed. The roster can therefore never
-exceed the 5 buff slots, and it only clears at a boss.
+fully-stacked bacterium must finally be killed. Boss levels are what eventually
+force a hard clear. Before bosses exist, the per-bacterium stack is still bounded
+at five slots; a sixth escape replaces the oldest buff.
 
 Boss specifics — whether a boss is a separate level or a special wave, whether
 fleeing is disabled outright or permitted but buff-free, whether a threshold is
@@ -473,17 +486,17 @@ becomes the only thing holding the whole system together. With it, escapes are
 bounded across a run and the roster develops a rhythm — build up, flush, rebuild —
 rather than a monotonic ramp.
 
-Disabling fleeing at boss levels also dissolves a problem that otherwise needs its
-own rule: what happens when a bacterium with a full roster of 5 buffs escapes a
-sixth time. No slot-replacement or discard rule is needed, because the cap can
-never be exceeded.
+Disabling fleeing at boss levels gives the system a periodic hard clear. Before
+boss levels exist, a bacterium with five buffs can escape again, so the fixed-size
+array needs a rule: the new buff replaces the oldest.
 
 ### Consequences
 
 - The roster lives on `World`, not `Level`. `Level_Transition` must **not** clear
   it — a change to what that state does when resetting per-level state.
 - **No escape counter** exists on a bacterium. The 5-slot cap is load-bearing, not
-  merely a safety bound.
+  merely a safety bound. A sixth escape replaces the oldest buff; the slot count
+  never grows.
 - Because a carried bacterium can be escaped on repeatedly, the roster can grow
   faster than fresh spawns. Late levels risk becoming a wall of returning bacteria
   rather than a mix. A tuning concern, not a structural one.
@@ -499,11 +512,6 @@ never be exceeded.
 
 ### Open questions (not yet decided)
 
-- **Does the flee threshold scale with buff count?** A carried bacterium returns
-  at full health with up to 5 buffs. If it can flee the instant the threshold is
-  crossed, a heavily buffed bacterium barely participates, and the buff system
-  feels pointless — the player earns the escalation and gets nothing from it.
-  Suggestion: a stacked bacterium should fight harder before escaping.
 - **At boss levels, is fleeing disabled outright, or permitted but buff-free?**
   Only "disabled" makes "clear all bacteria" mean what it says.
 - **Does the roster enter the boss level, or is it spent first?** Letting it arrive
@@ -513,6 +521,70 @@ never be exceeded.
 - **Boss shape.** Separate level, or special wave within a level? If a special
   wave, the other waves in that level follow normal flee rules.
 
+## Return queue mechanics
+
+### Decision
+
+The roster is a FIFO on `World`, capped at `MAX_ENEMIES`. Each entry stores the
+bacterium's species, its buffs, and `waves_until_return`. A bacterium that flees is
+added with a delay of one wave. When a wave completes, every pending delay above
+zero is decremented; entries at zero are due. Due entries are consumed at spawn
+time, before fresh bacteria, and each consumes one of the wave's existing spawn
+slots. Fresh bacteria fill the remaining slots. If more entries are due than the
+wave can hold, the remainder stays due for the following wave.
+
+When the roster is full, adding a fled bacterium drops the oldest entry.
+
+### Reason
+
+Reusing the next wave's spawn slots keeps `enemy_count`, the generated formation,
+and the `MAX_ENEMIES` pool bound unchanged. Adding returners on top would require
+extra formation positions and could exceed the pool. FIFO keeps the return order
+deterministic and reads "positionally" as queue order.
+
+### Consequences
+
+- `spawn_count` includes returning bacteria, so they count toward the wave's
+  threshold denominator and must be resolved before it completes.
+- A returning bacterium can flee again; it re-enters the queue for the following
+  wave and gains another buff.
+- A large backlog may take several waves to clear. That is the intended "one wave
+  at a time" behaviour, not a dropped return.
+- The roster is initialized in `world_init` and must not be cleared by
+  `level_init` or `Level_Transition`.
+- Returners spawn with their preserved species and restored health, using the next
+  wave's entry path and formation position.
+
+## Flee animation phase
+
+### Decision
+
+The flee response is a short wave phase. In 1.3 the phase has zero duration.
+Crossing the threshold marks the remaining bacteria `.Fleeing` and increments
+`fled_count`, but does not advance the wave yet. Advancement waits until every
+fleeing bacterium finishes the phase. At finish, each is pushed into the roster,
+its ownership is cleared, and its slot is deactivated.
+
+Collision ignores `.Fleeing` bacteria. Future animation work adds a duration and
+exit motion to the phase; it does not change resolution or roster ownership.
+
+### Reason
+
+Waiting for the phase avoids two separate problems: the next wave starting while
+the previous wave's bacteria are still leaving, and fleeing bacteria needing a
+visual-only representation outside the pool. The pool and ownership stay valid for
+the whole phase.
+
+### Consequences
+
+- The wave is logically resolved at crossing; only advancement waits for the
+  presentation phase.
+- `fled_count` increments at phase start, so the resolution counters are complete
+  before the bacteria leave play.
+- The zero-duration phase makes 1.3 behave as an immediate flee while leaving one
+  insertion point for the eventual animation.
+- The animation itself is presentation only and must not decide anything.
+
 ## Flee threshold
 
 ### Decision
@@ -521,7 +593,9 @@ Each wave draws its flee threshold once, at spawn, from
 `derive_seed(wave_seed, .Level, 0)`. The threshold is a per-mille integer
 fraction **destroyed**, not a fraction remaining. The crossing test is
 `destroyed * 1000 >= spawn_count * threshold_permille`, all integer: no
-division, no float compare, no boundary rounding.
+division, no float compare, no boundary rounding. The rolled value is the **base**
+threshold; "Flee threshold scaling" defines the effective value the crossing test
+actually uses.
 
 The curve is a half cycle of a raised cosine over 20 levels:
 
@@ -570,6 +644,40 @@ early levels and make the coin flip one-sided.
   unchanged.
 - At level 15 the threshold is around 593 permille, so a five-bacterium wave
   flees with roughly two still standing.
+- A level marked `flee_prohibited` skips the threshold draw entirely and uses
+  `1000`. The flag has no CLI or menu surface in 1.3; it is verified by a
+  temporary code edit and becomes a boss-level setting in Phase 8.
+
+## Flee threshold scaling
+
+### Decision
+
+The effective threshold is the rolled base plus a per-buff increase, using the
+highest buff count among the wave's active owners:
+
+```
+effective = clamp(base + 50 * max_buff_count, 500, 1000)
+```
+
+The increase is evaluated at the crossing test, not stored. With no buffed
+bacteria it equals the base. If the highest-buffed bacterium dies, the effective
+threshold drops on the next frame. The `50` is provisional.
+
+### Reason
+
+This keeps the threshold a wave-level decision while making a carried bacterium
+fight harder before escaping. Using the highest count rather than the average
+prevents one veteran from being diluted by fresh bacteria. Recomputing at the
+crossing test means killing the resistance source makes the rest easier to rout.
+
+### Consequences
+
+- A single heavily buffed bacterium anchors the whole wave's flee point.
+- The overlay's threshold value is the rolled base unless it is extended to show
+  the effective value; logs should carry both.
+- The `50` is a tuning constant, not a base-stat value, and can change without
+  changing the roster or buff model.
+- This resolves the open question: the flee threshold does scale with buff count.
 
 ## Resistance buffs
 
@@ -577,7 +685,9 @@ early levels and make the coin flip one-sided.
 
 Fleeing bacteria gain resistance buffs on return. Buffs are per-instance, held in
 a fixed-size array of **5** slots on `BacteriaCold`. Each escape rolls a category
-from the full set, so repeats are allowed by design.
+from the full set, so repeats are allowed by design. The roll happens at the flee
+event and is stored in the roster entry; it is applied when the bacterium returns.
+If all five slots are filled, the new buff replaces the oldest.
 
 Categories for v1, one per axis: **Hardy** (+max health), **Resistant** (reduced
 damage taken), **Biofilm** (absorbs the first N hits), **Frenzied** (+speed).
@@ -599,12 +709,21 @@ simplicity and for greater variance in resulting stacks.
 ### Consequences
 
 - **Buffs live on the bacteria instance**, not in `BACTERIA_DEFS`.
+- **The roll is stored on the roster entry.** A pending bacterium is self-contained:
+  species, buffs, and its return delay. Dropping an entry does not need a later
+  roll to be undone.
+- **Buff rolls are seeded.** The roll derives from a stored `Wave.seed` through a
+  new `.Buff` seed category and the fleeing slot index. A wave flees once, so the
+  slot index is unique within that roll.
+- **Phase 1.3 owns the scaffolding.** It adds the category enum, the five-slot
+  array, `BUFF_DEFS`, and the seeded roll because the flee response needs them.
+  Phase 1.4 applies the four effects and wires `species_unlocked` into spawning.
 - **Each escape is a compounding gain**: a buff plus a free full-health restore,
   while the rest of the wave stays at spawn baseline. Failure makes the game
   harder, which is thematically intended, but growth is multiplicative rather than
-  additive. The 5-slot cap is the bound, and because carried bacteria can be
-  escaped on indefinitely, that cap is load-bearing rather than merely a safety
-  net. Boss levels are what keep it from being exceeded.
+  additive. The array never grows past five; a sixth escape replaces the oldest.
+  Boss levels are the eventual hard clear, not the thing that enforces the slot
+  count.
 - **The specific runaway risk is Frenzied stacking.** A 5-stack Frenzied
   Pseudomonas at base speed 400, multiplied by a wave `speed_scalar` that already
   scales with level block (`src/procedural.odin:132`), could produce an
@@ -878,7 +997,8 @@ skill tree mounts into an existing state rather than requiring a rewrite.
 ### Decision
 
 Add `.Level` to the existing `SeedCategory` enum rather than reusing `.Wave`
-with a distinguishing number.
+with a distinguishing number. Add `.Buff` for the per-escape resistance roll, so
+buff rolls do not overload `.Enemy` when species choice is wired later.
 
 Derive seeds by **chaining**, not by a single global counter: a level derives from
 the run seed by level number, and each wave derives from its level seed by its
@@ -913,7 +1033,8 @@ appears once.
   number on the level seed, so no `.Level` number's meaning depends on how many
   waves a level happened to draw.
 - A wave seed is a pure function of `(run seed, level, wave index)` and can be
-  recomputed without simulating anything.
+  recomputed without simulating anything. It must be stored on `Wave` because the
+  flee-time buff roll happens after `wave_init` has returned.
 - `.Level` no longer means "level number" below the root derivation; it is reused
   for per-level draws with small numbers. A second category would restore strict
   meaning but is not worth it at this call count.
@@ -922,7 +1043,7 @@ appears once.
   `Level_Transition` both need to derive seeds and only see `World`. Selection —
   fixed from `--seed` or clock-derived — still happens once, in `game_init`, and
   must be written before `world_init` runs.
-- The derivation graph has **six** distinct `(parent, category, number)` triples
+- The derivation graph has **seven** distinct `(parent, category, number)` triples
   in a run:
   - `(master_seed, .Level, level_number)` → `level_seed`
   - `(level_seed, .Level, 0)` → the level's wave count
@@ -930,6 +1051,11 @@ appears once.
   - `(wave_seed, .Entry, 0)` → entry points
   - `(wave_seed, .Level, 0)` → flee threshold
   - `(wave_seed, .Wave, 0)` → count jitter
+  - `(wave_seed, .Buff, slot_index)` → the buff for a bacterium fleeing from
+    that wave
+- The buff triple is keyed by the fleeing bacterium's slot. A wave flees once, so
+  each slot is used at most once per wave; a bacterium that returns and flees
+  again does so under the new wave's seed.
 - Index bases: level number is 1-based and player-facing, matching
   `level_to_params`. Wave index is 0-based and internal, matching
   `level.wave[i]`. Mixing them is how a level silently wraps to the wrong block.

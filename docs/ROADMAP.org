@@ -14,7 +14,9 @@ when the one before it is verified.
 
 Decide each before writing the code that depends on it.
 
-- [ ] **Does the flee threshold scale with buff count?** Blocks 1.3.
+- [X] **Does the flee threshold scale with buff count?** Resolved: scale by the
+      wave's highest buff count, +50 permille per buff, clamped. See
+      [[file:DECISIONS.md::Flee threshold scaling][Flee threshold scaling]].
 - [ ] **Frenzied stacking** — additive-with-cap or free multiplication? Blocks
       buff tuning, not implementation.
 - [ ] **Boss shape, roster entry, meter interaction** — deferred with Phase 8,
@@ -52,36 +54,55 @@ Ownership, counters, crossing detection, and advancement. The flee response is
 - [X] Attribute deaths to the owning wave at health zero.
 - [X] Do not count a failed spawn; retry it, and guard the formation-shortfall
       case.
-- [x] Once spawning completes, apply
+- [X] Once spawning completes, apply
       ~destroyed_count * 1000 >= spawn_count * threshold_permille~ and set
       ~threshold_crossed~ once.
-- [x] Resolve dead, fled, and still-alive explicitly; complete the wave when
+- [X] Resolve dead, fled, and still-alive explicitly; complete the wave when
       ~resolved == spawn_count~.
-- [x] Advance ~wave_index~ once per completed wave; set ~Level.level_end~ when
+- [X] Advance ~wave_index~ once per completed wave; set ~Level.level_end~ when
       it reaches the level's wave count.
-- [x] Add temporary wave logs: init, crossing, resolution, advancement, level
+- [X] Add temporary wave logs: init, crossing, resolution, advancement, level
       end.
 
 *** 1.3 Fleeing and returning
 
-- [ ] Flee the remaining bacteria when the fraction destroyed crosses the rolled
-      threshold; resolve the wave at that moment.
-- [ ] Move fled bacteria into a pending roster on ~World~, not ~Level~.
-- [ ] Queue each fled bacterium for the next wave, positionally.
+Full detail: [[file:DECISIONS.md::Return queue mechanics][Return queue mechanics]],
+[[file:DECISIONS.md::Flee animation phase][Flee animation phase]],
+[[file:DECISIONS.md::Flee threshold scaling][Flee threshold scaling]], and
+[[file:DECISIONS.md::Resistance buffs][Resistance buffs]].
+
+- [ ] Add the buff scaffolding: ~BuffCategory~ (~Hardy~, ~Resistant~,
+      ~Biofilm~, ~Frenzied~), a 5-slot array on ~BacteriaCold~, a separate
+      ~BUFF_DEFS~ table, and ~max_health~.
+- [ ] Add the ~.Buff~ seed category and store ~seed~ on ~Wave~.
+- [ ] Add ~PendingBacteria~ and a FIFO roster on ~World~, capped at
+      ~MAX_ENEMIES~; initialize it in ~world_init~ and never clear it in
+      ~level_init~.
+- [ ] Add ~Level.flee_prohibited~; skip the threshold draw and use ~1000~ when
+      set.
+- [ ] Apply ~clamp(base + 50 * max_buff_count, 500, 1000)~ at the crossing test.
+- [ ] On crossing, start the zero-duration flee phase: mark remaining owned
+      bacteria ~.Fleeing~, increment ~fled_count~, and ignore them in collision.
+- [ ] Roll the buff at flee; replace the oldest when the 5 slots are full; store
+      it on the roster entry.
+- [ ] Queue each fled bacterium one wave ahead; decrement delays on wave
+      completion; drop the oldest roster entry when full.
+- [ ] On return, fill the next wave's existing spawn slots before fresh spawns;
+      preserve species, apply buffs, and restore ~max_health~.
+- [ ] Finish the flee phase: push to the roster, clear ownership, deactivate, and
+      only then allow advancement.
 - [ ] Let carried bacteria flee again: fresh buff roll, fresh health restore, no
       escape counter.
-- [ ] On return, roll a resistance buff and restore health to spawn max.
-- [ ] Bound the roster against ~MAX_ENEMIES~; drop the oldest when full.
-- [ ] Add a fleeing-prohibited flag to ~Level~ and skip the threshold roll when
-      it is set.
+- [ ] Add flee, roster, buff, return, drop, and flee-prohibited logs.
 
-*** 1.4 Resistance buffs
+*** 1.4 Resistance buff effects
 
-- [ ] Add a ~BuffCategory~ enum: ~Hardy~, ~Resistant~, ~Biofilm~, ~Frenzied~.
-- [ ] Hold buffs per instance on ~BacteriaCold~ as a fixed 5-slot array of
-      ~(category, magnitude)~ pairs.
-- [ ] Add a separate ~BUFF_DEFS~ table with absolute magnitudes.
-- [ ] Roll the category from the full set on each return; repeats allowed.
+- [ ] Apply ~Hardy~: raise max health from ~BUFF_DEFS~.
+- [ ] Apply ~Resistant~: reduce damage taken; resolve its interaction with weapon
+      weakness before tuning.
+- [ ] Apply ~Biofilm~: absorb the first N hits.
+- [ ] Apply ~Frenzied~: raise speed; keep the stacking question open until
+      tuning.
 - [ ] Wire ~species_unlocked~ into spawning so ~bacteria_spawn~ stops hardcoding
       ~.Strep~.
 
@@ -103,6 +124,12 @@ Ownership, counters, crossing detection, and advancement. The flee response is
 - [ ] Level 1 is always one wave of five with a top-center entry across seeds.
 - [ ] Wave-count ranges widen with level as documented.
 - [ ] Flee and return do not perturb determinism.
+- [ ] The roster survives a level transition and returns in the next level's
+      first wave.
+- [ ] The flee phase completes before the wave advances; collision ignores
+      ~.Fleeing~ bacteria.
+- [ ] A full roster drops its oldest entry; overflow returns stay queued rather
+      than being lost.
 
 *** 1.7 Unit tests
 
@@ -112,6 +139,8 @@ Ownership, counters, crossing detection, and advancement. The flee response is
       budget split and jitter properties.
 - [ ] Cover ~level_init~ smoke: level 1 shape, sum/floor rules, same-seed
       replay, different seeds differing.
+- [ ] Cover effective threshold scaling, roster FIFO/capacity, and buff
+      replacement.
 - [ ] Use a local RNG in every test; the test runner seeds the global generator
       randomly.
 

@@ -90,6 +90,11 @@ exactly three cases:
 
 There is no other exit. In particular a wave does not end on a timer.
 
+A fleeing wave is logically resolved when the threshold is crossed. The wave does
+not advance until its fleeing bacteria finish the flee phase. In 1.3 that phase is
+zero-length; the seam exists so an exit animation can be added later without
+letting the next wave overlap it.
+
 ## Fleeing, resistance, and returning
 
 Fleeing is not an escape valve. It is the primary difficulty-escalation engine:
@@ -102,7 +107,15 @@ Each wave draws a flee threshold from the seed **once**, at spawn. On every
 subsequent frame the threshold is compared deterministically — no per-frame
 probability anywhere in the flee path. The threshold is a per-mille fraction
 **destroyed**; when that fraction reaches it, the remaining bacteria flee and
-the wave resolves at that moment.
+the wave resolves.
+
+The rolled value is the base. The effective threshold rises with the highest buff
+count among the wave's active members, by a provisional 50 permille per buff,
+clamped to `[500, 1000]`. The effective value is recomputed at the crossing test,
+so killing the most resistant bacterium can lower it.
+
+A level marked fleeing-prohibited skips the draw and uses `1000`, meaning the wave
+cannot flee and must be fully destroyed.
 
 ### Resistance
 
@@ -116,7 +129,8 @@ then returns having developed **resistance**. Four categories:
 
 Each escape grants one category and restores the bacterium to spawn max health.
 Because escapes compound, a bacterium can be fled on repeatedly and stack
-resistance, up to five slots.
+resistance, up to five slots. The roll happens at the escape and is stored with
+the pending bacterium. A sixth escape replaces the oldest buff.
 
 ### The return queue
 
@@ -125,7 +139,20 @@ bacterium enters the *next wave* after its escape; if it escapes again, it enter
 the wave after that. A level therefore never opens with the whole backlog at once
 — it arrives one wave at a time.
 
-The queue lives on the world, not on a level or a wave.
+The queue lives on the world, not on a level or a wave. It is FIFO and capped at
+`MAX_ENEMIES`; when full, the oldest entry is dropped. Returning bacteria consume
+the next wave's existing spawn slots before fresh bacteria, so the wave's count,
+formation, and pool bound stay unchanged. If more are due than the wave can hold,
+the remainder stays queued for the following wave.
+
+### The flee phase
+
+Crossing the threshold puts every remaining member of the wave into `.Fleeing`.
+The wave's counters are complete at that point, but advancement waits until the
+phase finishes. During the phase ownership is still valid and collision ignores
+the fleeing bacteria. At the end they enter the roster, ownership is cleared, and
+the slots are freed. The phase is zero-length in 1.3; a later animation supplies
+duration and motion without changing the resolution or roster rules.
 
 ### Bosses
 
@@ -168,14 +195,16 @@ root
    ├─ derive_seed(level_seed, .Wave, i)        → wave_seed, i = 0..wave_count-1
    │  ├─ derive_seed(wave_seed, .Entry, 0)    → entry path rng
    │  ├─ derive_seed(wave_seed, .Level, 0)    → that wave's flee threshold
-   │  └─ derive_seed(wave_seed, .Wave, 0)     → that wave's count jitter
+   │  ├─ derive_seed(wave_seed, .Wave, 0)     → that wave's count jitter
+   │  └─ derive_seed(wave_seed, .Buff, slot)  → a fleeing bacterium's buff roll
    └─ the level's enemy budget is split across its waves; the split itself is
       arithmetic, not a draw
 ```
 
 `level_seed` carries per-level decisions; `wave_seed` carries per-wave decisions.
 A wave's index within its level is its seed key, so a wave seed is a pure function
-of `(run seed, level, wave index)` and needs no run history to recompute.
+of `(run seed, level, wave index)` and needs no run history to recompute. The wave
+stores its seed so flee-time buff rolls can derive from it after initialization.
 
 The invariant is that no `(parent_seed, category, number)` triple is ever reached
 twice in a run. The same `(category, number)` under a *different* parent is fine —
