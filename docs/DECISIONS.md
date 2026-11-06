@@ -749,6 +749,37 @@ simplicity and for greater variance in resulting stacks.
 - **What visual channel do buffs use?** One outline per category is the current
   leaning, held loosely. Does not need resolving before the skill tree.
 
+## Buff storage representation
+
+### Decision
+
+Buffs are stored per instance as `[MAX_BUFFS]BuffCategory` plus a `buff_count`.
+The magnitude is looked up in `BUFF_DEFS`; it is not stored per slot. Slots stay
+in chronological order. When all five are filled, a new buff shifts slots 1–4
+down and is written at index 4, so index 0 is always the oldest.
+
+`max_health` lives on `BacteriaHot`, beside `health`.
+
+### Reason
+
+Category-only storage avoids duplicating magnitudes that `BUFF_DEFS` already
+owns, and a single source for the magnitude keeps tuning in one place.
+Chronological order makes logs and any later display read naturally; with five
+slots the shift cost is irrelevant. `max_health` is combat state, so it belongs
+with `health` rather than with the buff list.
+
+### Consequences
+
+- `bacteria_buff_add` is the append path for a new escape. Restoring a roster
+  entry must copy the whole array and count, not call the append helper once per
+  buff, or the slots shift again.
+- `bacteria_init` clears buffs before a spawn path can copy stored buffs onto a
+  reused slot. Any future spawn-params buffs must be applied after that clear.
+- `max_health` is base health in 1.3. The return path must compute the buffed
+  value before restoring health, otherwise Hardy bacteria return at base health.
+- The `BuffCategory` ordinal becomes part of a seeded roll once the flee path
+  indexes the enum. Keep the enum order stable from that point on.
+
 ## Bacteria identity and behavior
 
 ### Decision

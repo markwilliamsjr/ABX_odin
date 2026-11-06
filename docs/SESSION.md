@@ -141,12 +141,37 @@ No source changed in this pass; these decisions are recorded in `DECISIONS.md`.
 - `Level.flee_prohibited` skips the threshold draw and uses `1000`. It has no CLI
   surface; verify with a temporary code edit.
 
+## 1.3 step one: buff scaffolding (2026-11-06)
+
+Implemented in `src/enemy.odin`; `odin check src` passes.
+
+- `MAX_BUFFS :: 5`; `BuffCategory`; `BuffDefinition` and `BUFF_DEFS` with the
+  unit of each category documented.
+- `BacteriaHot.max_health` is set from `BACTERIA_DEFS` health in
+  `bacteria_init`, and `health` is then restored from it.
+- `BacteriaCold.buffs` and `buff_count` are cleared on every spawn, so a reused
+  slot cannot inherit the previous occupant's buffs.
+- `bacteria_buff_add` appends until full, then shifts slots 1–4 down and writes
+  the new category at index 4. It is unused until the flee roll lands.
+- All `BUFF_DEFS` magnitudes are `1` placeholders and no effect reads them yet.
+
+Review notes not yet acted on:
+
+- `BuffCategory` is ordered `Frenzied, Hardy, Resistant, Biofilm`, while the docs
+  and `BUFF_DEFS` list `Hardy, Resistant, Biofilm, Frenzied`. Freeze the order
+  before the seeded roll uses the enum ordinal.
+- A magnitude of `1` is meaningful for Biofilm (one hit) but not for Resistant
+  (1 permille) or Frenzied (1 speed point). Treat the values as provisional.
+- `BacteriaState` was moved above `Sine_Dive`; unrelated to the scaffolding.
+- `bacteria_buff_add` sits after `bacteria_animate`, outside the helper section.
+
 ## Current code state
 
-`odin check src` is clean and roadmap 1.2 is implemented end to end: ownership,
+`odin check src` is clean. Roadmap 1.2 is implemented end to end: ownership,
 counters, spawn termination, crossing, completion, advancement, and `level_end`.
-`fled_count` is still always zero, and `level_end` is written but unread until
-`.Level_Transition` lands in 1.5.
+The first 1.3 item, buff scaffolding, is also in place but has no runtime
+behavior. `fled_count` is still always zero, and `level_end` is written but
+unread until `.Level_Transition` lands in 1.5.
 
 Runtime verification: the crossing checks were reported passing — boundary,
 set-once, shortfall denominator, and the zero-spawn guard. The resolution and
@@ -158,21 +183,27 @@ wave guard uses `<` and `wave_dive_update` is guarded, and the overlay reads
 
 ## Current task
 
-Roadmap 1.3, fleeing and returning. The design is settled; implementation has not
-started. 1.2 is complete; 1.6 verification stays outstanding behind it.
+Roadmap 1.3, fleeing and returning. The design is settled and the buff
+scaffolding is implemented; the rest of the slice has not started. 1.2 is
+complete; 1.6 verification stays outstanding behind it.
 
 ## Next step
 
-Implement 1.3 in roadmap order: buff scaffolding and the `.Buff` seed, the roster
-on `World`, the flee-prohibited flag, the effective threshold, the zero-duration
-flee phase, roster scheduling and capacity, the return spawn path, then logs and
-verification.
+Continue 1.3 in roadmap order: add the `.Buff` seed category and store `seed` on
+`Wave`, then the FIFO roster on `World`, the flee-prohibited flag, the effective
+threshold, the zero-duration flee phase, roster scheduling and capacity, the
+return spawn path, then logs and verification.
 
-The existing crossing branch in `wave_update` is the only 1.3 seam.
-`Level.end_chance` still needs confirming and removing before 1.5.
+Before the seeded buff roll lands, settle the `BuffCategory` order and the
+`BUFF_DEFS` magnitudes. The existing crossing branch in `wave_update` is the only
+1.3 seam. `Level.end_chance` still needs confirming and removing before 1.5.
 
 ## Open issues
 
+- `BuffCategory` order differs from the documented order. It becomes part of
+  deterministic replay once the seeded roll indexes the enum, so settle it before
+  that roll lands.
+- `BUFF_DEFS` magnitudes are `1` placeholders; 1.4 owns tuning.
 - `Level.end_chance` is unread and superseded by the rolled flee threshold;
   `Level.level_end` is written but unread until 1.5.
 - `--no-vsync` is parsed but never read; the renderer always enables vsync.
@@ -186,6 +217,12 @@ The existing crossing branch in `wave_update` is the only 1.3 seam.
 - `wave_init` assigns `spawn_region = 0` twice.
 
 ## Verification to record
+
+1.3 buff scaffolding: compile clean; no runtime behavior yet. Still to record:
+
+- a reused pool slot starts with `buff_count == 0` and base `max_health`
+- seven `bacteria_buff_add` calls leave the five newest, in order, with
+  `buff_count == 5`
 
 1.3 flee and return: not yet run.
 

@@ -52,6 +52,11 @@ Implemented:
 - **Flee threshold.** Rolled once per wave from the wave seed, held as
   per-mille destroyed, shown in the debug overlay, and consumed by the crossing
   test. The flee response is not implemented.
+- **Resistance buff scaffolding.** `BuffCategory` covers Hardy, Resistant,
+  Biofilm, and Frenzied. A five-slot buff list and `buff_count` live on
+  `BacteriaCold`; `BUFF_DEFS` holds magnitudes; `max_health` lives on
+  `BacteriaHot`; and `bacteria_buff_add` replaces the oldest slot when full. No
+  buff is rolled or applied yet.
 - **App shell.** Menu, playing, and paused states; Esc pauses; `--debug` skips
   the menu. `Level_Transition` and `Game_Over` exist but do nothing.
 - **CLI.** `--debug`, `--seed`, `--level`, `--no-vsync`, and `--help`.
@@ -61,7 +66,7 @@ Implemented:
 
 Not yet implemented:
 
-- Fleeing, returning bacteria, the pending roster, and resistance buffs.
+- Fleeing, returning bacteria, the pending roster, and resistance buff effects.
 - Real `Level_Transition` logic.
 - Clay UI, settings, skill tree, bosses, and adaptive wave composition.
 - A working no-vsync path and frame limiter.

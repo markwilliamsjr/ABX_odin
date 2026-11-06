@@ -68,10 +68,11 @@ Ownership, counters, crossing detection, and advancement. The flee response is
 
 Full detail: [[file:DECISIONS.md::Return queue mechanics][Return queue mechanics]],
 [[file:DECISIONS.md::Flee animation phase][Flee animation phase]],
-[[file:DECISIONS.md::Flee threshold scaling][Flee threshold scaling]], and
-[[file:DECISIONS.md::Resistance buffs][Resistance buffs]].
+[[file:DECISIONS.md::Flee threshold scaling][Flee threshold scaling]],
+[[file:DECISIONS.md::Resistance buffs][Resistance buffs]], and
+[[file:DECISIONS.md::Buff storage representation][Buff storage representation]].
 
-- [ ] Add the buff scaffolding: ~BuffCategory~ (~Hardy~, ~Resistant~,
+- [X] Add the buff scaffolding: ~BuffCategory~ (~Hardy~, ~Resistant~,
       ~Biofilm~, ~Frenzied~), a 5-slot array on ~BacteriaCold~, a separate
       ~BUFF_DEFS~ table, and ~max_health~.
 - [ ] Add the ~.Buff~ seed category and store ~seed~ on ~Wave~.

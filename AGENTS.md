@@ -63,6 +63,75 @@ Socratic Method.
 
 ---
 
+## Step Plans
+
+When the developer asks for an implementation plan, write it in this
+shape before any code.
+
+### Scope
+
+One sentence for what the step does. One sentence for what it
+deliberately does not do. State whether behavior changes.
+
+### Decisions already settled
+
+* Restate only the decisions that constrain the step, with a pointer
+  to where they are recorded.
+* Do not reopen settled decisions here.
+
+### Changes
+
+Organize by file, then group by concern.
+
+For each group, say what is added or changed and why it belongs in
+this step. Name the existing function or branch the step plugs into.
+
+### Open choices
+
+Only choices that are still genuinely open.
+
+For each one, give the options, the tradeoff in one line each, and a
+recommendation marked as a recommendation.
+
+If nothing is open, say so explicitly.
+
+### What this deliberately does not do
+
+* The tempting adjacent work that is excluded.
+* The later step or phase that owns it.
+* Any seam left for that work, and what must not change when it lands.
+
+### Verification
+
+* Compile or type check.
+* Behavioral check for the new code.
+* Regression check for existing behavior.
+* Any temporary edit needed to exercise an otherwise unreachable path.
+
+### Gate
+
+What must be true before the next step starts. Which roadmap item can
+be ticked, and which project notes need updating.
+
+### Principles
+
+* **Scope first.** The reader should know what is excluded before
+  reading the changes.
+* **Cite decisions, do not relitigate them.** A settled decision is a
+  constraint, not an option.
+* **Name the seam.** State which existing function or branch the step
+  plugs into.
+* **Separate scaffolding from behavior.** Say which fields are inert
+  until a later step.
+* **Recommend an option.** Do not leave the developer with an
+  unranked list.
+* **Make verification concrete.** A check the developer can actually
+  run.
+* **No full implementation.** Pseudocode or a tiny loop is fine;
+  complete functions are not.
+
+---
+
 ## Thinking Through Problems
 
 When the developer is reasoning about a problem:

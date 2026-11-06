@@ -5,6 +5,7 @@ import "core:math/rand"
 import sdl "vendor:sdl2"
 // ---- Constants ----
 OWNER_NONE :: -1
+MAX_BUFFS :: 5
 
 // ---- Types ----
 BacteriaSpecies :: enum {
@@ -23,6 +24,20 @@ Scatter_Phase :: enum {
 Zigzag_Phase :: enum {
 	Dashing,
 	Pausing,
+}
+BacteriaState :: enum {
+	Entering,
+	Holding,
+	Diving,
+	Returning,
+	Fleeing,
+}
+
+BuffCategory :: enum {
+	Frenzied,
+	Hardy,
+	Resistant,
+	Biofilm,
 }
 
 Sine_Dive :: struct {
@@ -93,34 +108,36 @@ BacteriaDefinition :: struct {
 	texture_path:        string,
 }
 
-BacteriaState :: enum {
-	Entering,
-	Holding,
-	Diving,
-	Returning,
-	Fleeing,
-}
 
 BacteriaHot :: struct {
-	x, y, animation_timer, angle:              f32,
-	width, height, hb_width, hb_height:        int,
-	offset_x, offset_y, health, current_frame: int,
-	active:                                    bool,
-	species:                                   BacteriaSpecies,
+	x, y, animation_timer, angle:                          f32,
+	width, height, hb_width, hb_height:                    int,
+	offset_x, offset_y, health, max_health, current_frame: int,
+	active:                                                bool,
+	species:                                               BacteriaSpecies,
 }
 
 BacteriaCold :: struct {
 	bacteria_state:                                    BacteriaState,
 	entry_path:                                        EntryPathData,
-	entry_path_length:                                 f32,
 	dive_type:                                         DiveType,
-	current_segment:                                   int,
+	buffs:                                             [MAX_BUFFS]BuffCategory,
+	entry_path_length:                                 f32,
+	current_segment, buff_count:                       int,
 	pause_timer:                                       f32,
 	state_start_time:                                  u64,
 	t, speed, speed_scalar:                            f32,
 	dive_initialized, return_initialized, should_flee: bool,
 	formation_point, return_start_points:              sdl.FPoint,
 	wave_index:                                        int,
+}
+
+BuffDefinition :: struct {
+	magnitude: int,
+	// Hardy: Health Points
+	// Resistant: Permille damage reduction
+	// Biofilm: Hit Count
+	// Frenzied: Speed
 }
 
 // ---- Definitions / Table ----
@@ -199,16 +216,24 @@ BACTERIA_DEFS := [BacteriaSpecies]BacteriaDefinition {
 		texture_path = "assets/bacteria/pseudomonas.png",
 	},
 }
+
+BUFF_DEFS := [BuffCategory]BuffDefinition {
+	.Hardy = {magnitude = 1},
+	.Frenzied = {magnitude = 1},
+	.Resistant = {magnitude = 1},
+	.Biofilm = {magnitude = 1},
+}
 // ---- Init ----
 bacteria_init :: proc(hot: ^BacteriaHot, cold: ^BacteriaCold, spawn_params: ^BacteriaSpawnParams) {
 	bacteria_def := get_bacteria_def(spawn_params.species)
+	hot.max_health = bacteria_def.health
 	hot.height = bacteria_def.height
 	hot.width = bacteria_def.width
 	hot.hb_height = bacteria_def.hb_height
 	hot.hb_width = bacteria_def.hb_width
 	hot.offset_x = bacteria_def.offset_x
 	hot.offset_y = bacteria_def.offset_y
-	hot.health = bacteria_def.health
+	hot.health = hot.max_health
 	hot.active = true
 	hot.species = spawn_params.species
 	hot.x = spawn_params.path_data.control_points[0].x
@@ -230,6 +255,8 @@ bacteria_init :: proc(hot: ^BacteriaHot, cold: ^BacteriaCold, spawn_params: ^Bac
 	cold.current_segment = 0
 	cold.pause_timer = 0.0
 	cold.wave_index = spawn_params.wave_index
+	cold.buffs = {}
+	cold.buff_count = 0
 
 	switch hot.species {
 	case .Strep:
@@ -507,5 +534,17 @@ bacteria_animate :: proc(hot: ^BacteriaHot, def: ^BacteriaDefinition, delta_time
 	for hot.animation_timer >= def.frame_duration {
 		hot.animation_timer -= def.frame_duration
 		hot.current_frame = (hot.current_frame + 1) % def.frame_count
+	}
+}
+
+bacteria_buff_add :: proc(cold: ^BacteriaCold, category: BuffCategory) {
+	if cold.buff_count < MAX_BUFFS {
+		cold.buffs[cold.buff_count] = category
+		cold.buff_count += 1
+	} else {
+		for i in 1 ..< MAX_BUFFS {
+			cold.buffs[i - 1] = cold.buffs[i]
+		}
+		cold.buffs[MAX_BUFFS - 1] = category
 	}
 }
