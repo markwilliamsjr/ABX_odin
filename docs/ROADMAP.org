@@ -75,26 +75,28 @@ Full detail: [[file:DECISIONS.md::Return queue mechanics][Return queue mechanics
 - [X] Add the buff scaffolding: ~BuffCategory~ (~Hardy~, ~Resistant~,
       ~Biofilm~, ~Frenzied~), a 5-slot array on ~BacteriaCold~, a separate
       ~BUFF_DEFS~ table, and ~max_health~.
-- [ ] Add the ~.Buff~ seed category and store ~seed~ on ~Wave~.
-- [ ] Add ~PendingBacteria~ and a FIFO roster on ~World~, capped at
+- [X] Add the ~.Buff~ seed category and store ~seed~ on ~Wave~.
+- [X] Add ~PendingBacteria~ and a FIFO roster on ~World~, capped at
       ~MAX_ENEMIES~; initialize it in ~world_init~ and never clear it in
       ~level_init~.
-- [ ] Add ~Level.flee_prohibited~; skip the threshold draw and use ~1000~ when
+- [x] Add ~Level.flee_prohibited~; skip the threshold draw and use ~1000~ when
       set.
-- [ ] Apply ~clamp(base + 50 * max_buff_count, 500, 1000)~ at the crossing test.
-- [ ] On crossing, start the zero-duration flee phase: mark remaining owned
-      bacteria ~.Fleeing~, increment ~fled_count~, and ignore them in collision.
+- [x] Apply ~clamp(base + 50 * max_buff_count, 500, 1000)~ at the crossing test.
+- [X] On crossing, start the zero-duration flee phase: mark remaining owned
+      bacteria ~.Fleeing~ and keep them targetable; increment ~fled_count~ at
+      phase finish.
 - [ ] Roll the buff at flee; replace the oldest when the 5 slots are full; store
       it on the roster entry.
 - [ ] Queue each fled bacterium one wave ahead; decrement delays on wave
       completion; drop the oldest roster entry when full.
 - [ ] On return, fill the next wave's existing spawn slots before fresh spawns;
       preserve species, apply buffs, and restore ~max_health~.
-- [ ] Finish the flee phase: push to the roster, clear ownership, deactivate, and
+- [X] Finish the flee phase: push to the roster, clear ownership, deactivate, and
       only then allow advancement.
 - [ ] Let carried bacteria flee again: fresh buff roll, fresh health restore, no
       escape counter.
-- [ ] Add flee, roster, buff, return, drop, and flee-prohibited logs.
+- [ ] Add roster, buff, return, drop, and flee-prohibited logs. The flee begin
+      and finish logs, including phase elapsed time, land with the phase.
 
 *** 1.4 Resistance buff effects
 
@@ -127,8 +129,9 @@ Full detail: [[file:DECISIONS.md::Return queue mechanics][Return queue mechanics
 - [ ] Flee and return do not perturb determinism.
 - [ ] The roster survives a level transition and returns in the next level's
       first wave.
-- [ ] The flee phase completes before the wave advances; collision ignores
-      ~.Fleeing~ bacteria.
+- [ ] The flee phase completes before the wave advances; a phase kill counts as
+      destroyed and produces no roster entry. Deferred to the animation step,
+      because the phase is zero-length in 1.3.
 - [ ] A full roster drops its oldest entry; overflow returns stay queued rather
       than being lost.
 

@@ -2,7 +2,7 @@
 
 ## Date
 
-2026-11-06 (1.3 design settled; 1.2 complete 2026-11-05; earlier work 2026-11-01
+2026-11-13 (1.3 steps one–three; 1.2 complete 2026-11-05; earlier work 2026-11-01
 and 2026-10-31)
 
 ## Goal
@@ -135,9 +135,11 @@ No source changed in this pass; these decisions are recorded in `DECISIONS.md`.
 - Buffs roll at flee and are stored on the roster entry. The seed is
   `derive_seed(wave.seed, .Buff, slot_index)`. A sixth escape replaces the oldest
   buff.
-- Fleeing is a zero-duration wave phase in 1.3. The wave is logically resolved at
-  crossing, collision ignores `.Fleeing`, and advancement waits for the phase.
-  The future animation only adds duration and motion.
+- Fleeing is a zero-duration wave phase in 1.3. Crossing marks the rest
+  `.Fleeing`; advancement waits for the phase. Revised 2026-11-15: fleeing
+  bacteria stay targetable, and `fled_count` is incremented at finish so a phase
+  kill counts only as destroyed. The future animation only adds duration and
+  motion.
 - `Level.flee_prohibited` skips the threshold draw and uses `1000`. It has no CLI
   surface; verify with a temporary code edit.
 
@@ -165,13 +167,59 @@ Review notes not yet acted on:
 - `BacteriaState` was moved above `Sine_Dive`; unrelated to the scaffolding.
 - `bacteria_buff_add` sits after `bacteria_animate`, outside the helper section.
 
+## 1.3 step two: `.Buff` seed and `Wave.seed` (2026-11-13)
+
+- `.Buff` is appended to `SeedCategory`, after `.Level`, so existing category
+  ordinals and all previously derived seeds are unchanged.
+- `Wave.seed: u64` stores the wave seed, assigned in `wave_init` before any
+  derivation.
+- The existing entry and threshold derivations still use the local `wave_seed`.
+  The stored field is unread until the flee roll lands.
+
+## 1.3 step three: return roster (2026-11-13)
+
+- `PendingBacteria` stores species, buffs, `buff_count`, and
+  `waves_until_return`. `ReturnRoster` is a compact `[MAX_ENEMIES]` array plus a
+  `count`; both live in `src/enemy.odin`.
+- `World.return_roster` is zeroed in `world_init`. `level_init` takes only
+  `^Level`, so it cannot clear the roster.
+- `return_roster_push` appends until full, then shifts the filled portion down and
+  drops the oldest entry. `return_roster_pop` removes index 0, shifts the
+  remainder, decrements `count`, and zeroes the vacated tail.
+- A temporary `return_roster_self_test` ran at startup and passed under the dummy
+  SDL video driver: empty pop, FIFO order, cap at `MAX_ENEMIES`, and dropping the
+  two oldest on overflow. The check was removed after the run.
+
+## 1.3 step four: flee phase (2026-11-15)
+
+- `Wave.flee_phase_active` marks the phase. `wave_flee_begin` marks every active,
+  owned bacterium `.Fleeing` and records `flee_start_time`.
+- `wave_flee_update` runs after `wave_update` and before `wave_resolution_update`.
+  The phase is zero-duration, so it calls `wave_flee_finish` immediately.
+- `wave_flee_finish` pushes each survivor into the roster, deactivates the slot,
+  clears ownership, and increments `fled_count` per survivor. A bacterium killed
+  during the phase is already inactive, so it is neither pushed nor counted as
+  fled.
+- `fled_count` therefore settles at finish, not at crossing. The
+  `flee_phase_active` check in `wave_resolution_update` is load-bearing: killing
+  every fleeing bacterium mid-phase makes `destroyed_count` reach `spawn_count`
+  before finish runs.
+- Fleeing bacteria stay targetable; collision has no `.Fleeing` skip. With a
+  zero-length phase this is unobservable in 1.3 and is verified with the
+  animation.
+- Logs: `flee begin` reports the candidate count, `flee finish` reports
+  `fled_count`, roster count, and elapsed milliseconds from `sdl.GetTicks()`.
+
 ## Current code state
 
 `odin check src` is clean. Roadmap 1.2 is implemented end to end: ownership,
 counters, spawn termination, crossing, completion, advancement, and `level_end`.
-The first 1.3 item, buff scaffolding, is also in place but has no runtime
-behavior. `fled_count` is still always zero, and `level_end` is written but
-unread until `.Level_Transition` lands in 1.5.
+The 1.3 items through the flee phase are in place: buff scaffolding, the `.Buff`
+seed with `Wave.seed`, the return roster, `flee_prohibited`, the effective
+threshold, and the zero-duration flee phase. `fled_count` is now nonzero and
+roster entries are produced, but nothing consumes the roster yet: `Wave.seed` is
+still unread, no buff is rolled, and there is no return spawn path.
+`level_end` is written but unread until `.Level_Transition` lands in 1.5.
 
 Runtime verification: the crossing checks were reported passing — boundary,
 set-once, shortfall denominator, and the zero-spawn guard. The resolution and
@@ -183,20 +231,19 @@ wave guard uses `<` and `wave_dive_update` is guarded, and the overlay reads
 
 ## Current task
 
-Roadmap 1.3, fleeing and returning. The design is settled and the buff
-scaffolding is implemented; the rest of the slice has not started. 1.2 is
-complete; 1.6 verification stays outstanding behind it.
+Roadmap 1.3, fleeing and returning. The flee phase is implemented and populates
+the roster; the buff roll and the return path are not started. 1.2 is complete;
+1.6 verification stays outstanding behind it.
 
 ## Next step
 
-Continue 1.3 in roadmap order: add the `.Buff` seed category and store `seed` on
-`Wave`, then the FIFO roster on `World`, the flee-prohibited flag, the effective
-threshold, the zero-duration flee phase, roster scheduling and capacity, the
-return spawn path, then logs and verification.
+Roll the buff at flee: settle the `BuffCategory` order first, then derive using
+`derive_seed(wave.seed, .Buff, slot_index)`, store it on the roster entry, and
+replace the oldest buff when the five slots are full. After that, wire queue
+scheduling (`waves_until_return`, decrement on wave completion, roster cap) and
+the return spawn path.
 
-Before the seeded buff roll lands, settle the `BuffCategory` order and the
-`BUFF_DEFS` magnitudes. The existing crossing branch in `wave_update` is the only
-1.3 seam. `Level.end_chance` still needs confirming and removing before 1.5.
+`Level.end_chance` still needs confirming and removing before 1.5.
 
 ## Open issues
 
@@ -204,13 +251,18 @@ Before the seeded buff roll lands, settle the `BuffCategory` order and the
   deterministic replay once the seeded roll indexes the enum, so settle it before
   that roll lands.
 - `BUFF_DEFS` magnitudes are `1` placeholders; 1.4 owns tuning.
+- `Wave.seed` is stored but unread until the flee roll lands.
+- Fleeing bacteria remain targetable, but the phase is zero-length in 1.3, so a
+  phase kill cannot be observed and the counter rule is unverified.
+- `fled_count` settles at finish, which makes the resolution gate load-bearing;
+  the gate has not been exercised with a deferred finish.
 - `Level.end_chance` is unread and superseded by the rolled flee threshold;
   `Level.level_end` is written but unread until 1.5.
 - `--no-vsync` is parsed but never read; the renderer always enables vsync.
 - `species_unlocked` is computed but never read; `bacteria_spawn` hardcodes
   `.Strep`.
 - Decisions still read wall-clock time: `formation_complete_time`, the dive
-  gate, and `delta_time`.
+  gate, `flee_start_time` (log only), and `delta_time`.
 - `wave_init` writes `region_enemy_count[i] = result.placed` for every region,
   i.e. the full total into each. Correct while `compute_formation_bounds`
   returns 1; wrong when it returns more.
@@ -218,26 +270,44 @@ Before the seeded buff roll lands, settle the `BuffCategory` order and the
 
 ## Verification to record
 
+1.3 seed and roster: compile clean. The temporary startup roster self-test passed
+under the dummy SDL video driver and was removed: empty pop, FIFO order, cap at
+`MAX_ENEMIES`, and dropping the two oldest on overflow. Still to record:
+
+- same-seed run after appending `.Buff`: wave composition, formations, and
+  thresholds unchanged from the pre-change build
+- a roster entry survives `level_init` (structurally guaranteed by the `^Level`
+  signature, but not exercised)
+
 1.3 buff scaffolding: compile clean; no runtime behavior yet. Still to record:
 
 - a reused pool slot starts with `buff_count == 0` and base `max_health`
 - seven `bacteria_buff_add` calls leave the five newest, in order, with
   `buff_count == 5`
 
-1.3 flee and return: not yet run.
+1.3 flee phase: compile clean; not yet run. The checks are
 
-- level 11: kill to the threshold; the remaining bacteria enter `.Fleeing`,
-  `fled_count` matches, but the wave advances only after the flee phase
+- level 11: kill to the effective threshold; the remaining bacteria log
+  `flee begin`, `fled_count` matches at `flee finish`, the roster grows by that
+  count, and the wave advances only after finish
+- roster entries carry the remaining species, `waves_until_return == 1`, and the
+  freed slots are inactive with `OWNER_NONE`
+- `flee finish` elapsed time is reported; it is `0ms` or `1ms` in 1.3
+- defer `wave_flee_finish` by a few frames temporarily: the wave must not advance
+  while `flee_phase_active` is true, and must advance on the frame finish runs
+- prohibited wave: full clear produces no flee phase, no roster entry, and one
+  advancement
+- a phase kill counts as destroyed and produces no roster entry; deferred with
+  the animation because the phase is zero-length
+
+1.3 flee and return: return path not yet run.
+
 - returners appear first in the next wave, preserve species, and spawn with
   restored health and their buff
 - a carried bacterium flees again: new buff, no escape counter; a sixth escape
   replaces the oldest buff
 - a full roster drops the oldest; due overflow stays queued
-- flee-prohibited via temporary edit: no threshold draw, nothing flees, full
-  clear required
 - same seed twice: same thresholds, roster contents, and buff rolls
-- collision ignores `.Fleeing`; a fleeing bacterium cannot be killed or counted
-  twice
 
 1.2 crossing: reported passing.
 

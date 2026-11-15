@@ -90,10 +90,10 @@ exactly three cases:
 
 There is no other exit. In particular a wave does not end on a timer.
 
-A fleeing wave is logically resolved when the threshold is crossed. The wave does
-not advance until its fleeing bacteria finish the flee phase. In 1.3 that phase is
-zero-length; the seam exists so an exit animation can be added later without
-letting the next wave overlap it.
+A fleeing wave is headed for resolution when the threshold is crossed; its
+counters settle when the flee phase finishes. The wave does not advance until
+then. In 1.3 that phase is zero-length; the seam exists so an exit animation can
+be added later without letting the next wave overlap it.
 
 ## Fleeing, resistance, and returning
 
@@ -148,11 +148,12 @@ the remainder stays queued for the following wave.
 ### The flee phase
 
 Crossing the threshold puts every remaining member of the wave into `.Fleeing`.
-The wave's counters are complete at that point, but advancement waits until the
-phase finishes. During the phase ownership is still valid and collision ignores
-the fleeing bacteria. At the end they enter the roster, ownership is cleared, and
-the slots are freed. The phase is zero-length in 1.3; a later animation supplies
-duration and motion without changing the resolution or roster rules.
+The wave's counters settle at the end of the phase, but advancement waits until
+then. During the phase ownership is still valid and the fleeing bacteria remain
+targetable; a phase kill counts as destroyed and produces no roster entry. At the
+end the survivors enter the roster, ownership is cleared, and the slots are freed.
+The phase is zero-length in 1.3; a later animation supplies duration and motion
+without changing the resolution or roster rules.
 
 ### Bosses
 

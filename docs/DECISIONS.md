@@ -252,7 +252,10 @@ both clear ownership as part of leaving play.
 
 Each wave tracks two counters: `destroyed_count` and `fled_count`. The resolved
 count is their sum; there is no third field. Death increments destroyed.
-Fleeing increments fled. Either one clears ownership.
+Fleeing increments fled. Either one clears ownership. A bacterium marked
+`.Fleeing` that is subsequently killed counts as destroyed, not fled: the fled
+increment is taken at phase finish, so the two counters cannot both count the
+same bacterium.
 
 Wave resolution has three explicit cases: dead (resolved), fled (resolved and
 scheduled to return), and still alive (unresolved).
@@ -552,6 +555,9 @@ deterministic and reads "positionally" as queue order.
   at a time" behaviour, not a dropped return.
 - The roster is initialized in `world_init` and must not be cleared by
   `level_init` or `Level_Transition`.
+- The roster is a compact array with the oldest entry at index 0. Push and pop
+  shift only the filled portion. At `MAX_ENEMIES` the copy cost is irrelevant,
+  and chronological order stays readable in logs and a debugger.
 - Returners spawn with their preserved species and restored health, using the next
   wave's entry path and formation position.
 
@@ -560,27 +566,36 @@ deterministic and reads "positionally" as queue order.
 ### Decision
 
 The flee response is a short wave phase. In 1.3 the phase has zero duration.
-Crossing the threshold marks the remaining bacteria `.Fleeing` and increments
-`fled_count`, but does not advance the wave yet. Advancement waits until every
-fleeing bacterium finishes the phase. At finish, each is pushed into the roster,
-its ownership is cleared, and its slot is deactivated.
+Crossing the threshold marks the remaining bacteria `.Fleeing` and sets the phase
+active, but does not advance the wave yet. Advancement waits until every fleeing
+bacterium finishes the phase. At finish, each survivor is pushed into the roster
+and `fled_count` is incremented, then its ownership is cleared and its slot
+deactivated.
 
-Collision ignores `.Fleeing` bacteria. Future animation work adds a duration and
-exit motion to the phase; it does not change resolution or roster ownership.
+Fleeing bacteria remain valid collision targets. A bacterium killed during the
+phase increments `destroyed_count`, is not pushed into the roster, and does not
+count as fled. Future animation work adds a duration and exit motion to the
+phase; it does not change resolution or roster ownership.
 
 ### Reason
 
 Waiting for the phase avoids two separate problems: the next wave starting while
 the previous wave's bacteria are still leaving, and fleeing bacteria needing a
-visual-only representation outside the pool. The pool and ownership stay valid for
-the whole phase.
+visual-only representation outside the pool. The pool and ownership stay valid
+for the whole phase. Keeping fleeing bacteria targetable makes the escape
+contestable: the player can deny a return by finishing the job during the phase.
 
 ### Consequences
 
-- The wave is logically resolved at crossing; only advancement waits for the
-  presentation phase.
-- `fled_count` increments at phase start, so the resolution counters are complete
-  before the bacteria leave play.
+- The wave is headed for resolution at crossing, but its counters are only
+  complete at finish. `fled_count` counts escapes that actually happened.
+- The `flee_phase_active` gate in `wave_resolution_update` is load-bearing: if
+  the player kills every fleeing bacterium mid-phase, `destroyed_count` alone
+  reaches `spawn_count` before finish has pushed the roster and cleared the
+  phase.
+- A killed fleeing bacterium does not return, so an escape is not guaranteed at
+  crossing. The roster's build-up/flush rhythm depends on the player denying
+  escapes.
 - The zero-duration phase makes 1.3 behave as an immediate flee while leaving one
   insertion point for the eventual animation.
 - The animation itself is presentation only and must not decide anything.

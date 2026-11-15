@@ -50,13 +50,29 @@ Implemented:
   bounds, line formation layout, and entry paths. Entry is pinned to top-center
   for levels 1–2.
 - **Flee threshold.** Rolled once per wave from the wave seed, held as
-  per-mille destroyed, shown in the debug overlay, and consumed by the crossing
-  test. The flee response is not implemented.
+  per-mille destroyed, shown in the debug overlay as the base value, and consumed
+  by the crossing test. The test uses
+  `clamp(base + 50 * max_buff_count, 500, 1000)`, recomputed from the wave's
+  active owners on each check. `Level.flee_prohibited` skips the draw and uses
+  `1000`.
+- **Flee phase.** Crossing marks every remaining owned bacterium `.Fleeing` and
+  sets `flee_phase_active`. The phase is zero-duration in 1.3: finish runs on the
+  same frame, pushes each survivor into the roster with
+  `waves_until_return = 1`, clears ownership, deactivates the slot, and
+  increments `fled_count`. Advancement waits for the phase. Fleeing bacteria
+  remain targetable, so a phase kill counts as destroyed and produces no roster
+  entry; this is unreachable until the animation gives the phase duration.
+  `flee begin` and `flee finish` logs include candidate and fled counts and the
+  elapsed phase time.
 - **Resistance buff scaffolding.** `BuffCategory` covers Hardy, Resistant,
   Biofilm, and Frenzied. A five-slot buff list and `buff_count` live on
   `BacteriaCold`; `BUFF_DEFS` holds magnitudes; `max_health` lives on
   `BacteriaHot`; and `bacteria_buff_add` replaces the oldest slot when full. No
   buff is rolled or applied yet.
+- **Return roster.** `PendingBacteria` stores a species, buffs, and
+  `waves_until_return`; `ReturnRoster` on `World` is a compact FIFO capped at
+  `MAX_ENEMIES`, with the oldest entry at index 0. `world_init` initializes it
+  and `level_init` cannot clear it. Nothing enters or leaves the roster yet.
 - **App shell.** Menu, playing, and paused states; Esc pauses; `--debug` skips
   the menu. `Level_Transition` and `Game_Over` exist but do nothing.
 - **CLI.** `--debug`, `--seed`, `--level`, `--no-vsync`, and `--help`.
@@ -66,7 +82,8 @@ Implemented:
 
 Not yet implemented:
 
-- Fleeing, returning bacteria, the pending roster, and resistance buff effects.
+- Fleeing animation, buff rolls, roster scheduling, and the return spawn path.
+- Resistance buff effects.
 - Real `Level_Transition` logic.
 - Clay UI, settings, skill tree, bosses, and adaptive wave composition.
 - A working no-vsync path and frame limiter.

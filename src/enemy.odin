@@ -132,6 +132,17 @@ BacteriaCold :: struct {
 	wave_index:                                        int,
 }
 
+PendingBacteria :: struct {
+	species:            BacteriaSpecies,
+	buffs:              [MAX_BUFFS]BuffCategory,
+	buff_count:         int,
+	waves_until_return: int,
+}
+ReturnRoster :: struct {
+	entries: [MAX_ENEMIES]PendingBacteria,
+	count:   int,
+}
+
 BuffDefinition :: struct {
 	magnitude: int,
 	// Hardy: Health Points
@@ -139,6 +150,7 @@ BuffDefinition :: struct {
 	// Biofilm: Hit Count
 	// Frenzied: Speed
 }
+
 
 // ---- Definitions / Table ----
 
@@ -547,4 +559,29 @@ bacteria_buff_add :: proc(cold: ^BacteriaCold, category: BuffCategory) {
 		}
 		cold.buffs[MAX_BUFFS - 1] = category
 	}
+}
+
+return_roster_push :: proc(roster: ^ReturnRoster, entry: PendingBacteria) {
+	if roster.count < MAX_ENEMIES {
+		roster.entries[roster.count] = entry
+		roster.count += 1
+		return
+	}
+	for i in 1 ..< MAX_ENEMIES {
+		roster.entries[i - 1] = roster.entries[i]
+	}
+	roster.entries[MAX_ENEMIES - 1] = entry
+}
+
+return_roster_pop :: proc(roster: ^ReturnRoster) -> (PendingBacteria, bool) {
+	if roster.count == 0 {
+		return {}, false
+	}
+	entry := roster.entries[0]
+	for i in 1 ..< roster.count {
+		roster.entries[i - 1] = roster.entries[i]
+	}
+	roster.count -= 1
+	roster.entries[roster.count] = {}
+	return entry, true
 }

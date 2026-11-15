@@ -40,11 +40,12 @@ Game :: struct {
 }
 
 World :: struct {
-	player:      Player,
-	bullets:     Bullets,
-	level:       Level,
-	state:       GameState,
-	master_seed: u64,
+	player:        Player,
+	bullets:       Bullets,
+	level:         Level,
+	state:         GameState,
+	master_seed:   u64,
+	return_roster: ReturnRoster,
 }
 
 Assets :: struct {
@@ -112,6 +113,7 @@ game_init :: proc(game: ^Game) {
 }
 
 world_init :: proc(game: ^Game) {
+	game.world.return_roster = {}
 	if game.config.debug {
 		game.world.state = .Playing
 	} else {
@@ -162,6 +164,11 @@ world_update :: proc(game: ^Game, keystate: [^]u8, delta_time: f32) {
 		collision_update(&game.world.bullets, level)
 		if level.wave_index < level.wave_count {
 			wave_update(&game.world.level.wave[level.wave_index], &level.bacteria, delta_time)
+			wave_flee_update(
+				&game.world.level.wave[level.wave_index],
+				&level.bacteria,
+				&game.world.return_roster,
+			)
 			wave_dive_update(&game.world.level.wave[level.wave_index], &level.bacteria, delta_time)
 			wave_resolution_update(&game.world.level)
 		}

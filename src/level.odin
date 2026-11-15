@@ -10,6 +10,7 @@ import sdl "vendor:sdl2"
 // ---- Constants ----
 
 ENTRY_POINT_COUNT :: 15
+FLEE_THRESHOLD_PER_BUFF :: 50
 
 ENTRY_POINTS := [ENTRY_POINT_COUNT]sdl.FPoint {
 	// Top Edge
@@ -35,26 +36,26 @@ ENTRY_POINTS := [ENTRY_POINT_COUNT]sdl.FPoint {
 // ---- Types ----
 
 Wave :: struct {
-	level, enemy_count, spawn_count, species_unlocked, max_simult_divers: int,
-	threshold_permille:                                                   int,
-	spawn_delay, spawn_timer, dive_delay, dive_timer, speed_scalar:       f32,
-	path:                                                                 PathType,
-	formation_complete, threshold_crossed, spawn_finished:                bool,
-	formation_complete_time:                                              u64,
-	control_points:                                                       [3]sdl.FPoint,
-	formation_positions:                                                  [MAX_REGIONS][MAX_ENEMIES]sdl.FPoint,
-	region_start:                                                         [MAX_REGIONS]sdl.FPoint,
-	region_enemy_count:                                                   [MAX_REGIONS]int,
-	spawn_region, spawn_index:                                            int,
-	diver_selection_rule:                                                 DiverSelectionRule,
-	destroyed_count, fled_count, index, region_count:                     int,
+	level, enemy_count, spawn_count, species_unlocked, max_simult_divers:     int,
+	threshold_permille:                                                       int,
+	spawn_delay, spawn_timer, dive_delay, dive_timer, speed_scalar:           f32,
+	path:                                                                     PathType,
+	formation_complete, threshold_crossed, spawn_finished, flee_phase_active: bool,
+	flee_start_time, formation_complete_time, seed:                           u64,
+	control_points:                                                           [3]sdl.FPoint,
+	formation_positions:                                                      [MAX_REGIONS][MAX_ENEMIES]sdl.FPoint,
+	region_start:                                                             [MAX_REGIONS]sdl.FPoint,
+	region_enemy_count:                                                       [MAX_REGIONS]int,
+	spawn_region, spawn_index:                                                int,
+	diver_selection_rule:                                                     DiverSelectionRule,
+	destroyed_count, fled_count, index, region_count:                         int,
 }
 
 Level :: struct {
 	wave:                                 [MAX_WAVES]Wave,
 	bacteria:                             Bacteria,
 	wave_count, level_number, wave_index: int,
-	level_end:                            bool,
+	level_end, flee_prohibited:           bool,
 	end_chance:                           f32,
 }
 
@@ -66,13 +67,16 @@ wave_init :: proc(
 	wave_seed: u64,
 	enemy_count, level: int,
 	wave_index: int,
+	flee_prohibited: bool,
 ) {
 	wave.index = wave_index
 	wave.level = level
+	wave.seed = wave_seed
 	wave.spawn_count = 0
 	wave.spawn_index = 0
 	wave.spawn_timer = 0
 	wave.dive_timer = 0
+	wave.flee_start_time = 0
 	wave.formation_complete_time = 0
 	wave.destroyed_count = 0
 	wave.fled_count = 0
@@ -81,13 +85,18 @@ wave_init :: proc(
 	wave.threshold_crossed = false
 	wave.formation_complete = false
 	wave.spawn_finished = false
+	wave.flee_phase_active = false
 
 	entry_rng_state := rand.create(derive_seed(wave_seed, .Entry, 0))
 	entry_rng := runtime.default_random_generator(&entry_rng_state)
 
-	threshold_rng_state := rand.create(derive_seed(wave_seed, .Level, 0))
-	threshold_rng := runtime.default_random_generator(&threshold_rng_state)
-	wave.threshold_permille = threshold_picker(level, threshold_rng)
+	if flee_prohibited {
+		wave.threshold_permille = 1000
+	} else {
+		threshold_rng_state := rand.create(derive_seed(wave_seed, .Level, 0))
+		threshold_rng := runtime.default_random_generator(&threshold_rng_state)
+		wave.threshold_permille = threshold_picker(level, threshold_rng)
+	}
 
 	region_size, region_count := compute_formation_bounds(wp)
 	wave.region_count = region_count
@@ -107,10 +116,10 @@ wave_init :: proc(
 	}
 
 	entry_point_result, entry_ok := generate_entry_points(entry_rng, entry_rules)
-
 	if !entry_ok {
-		// TODO need fall back
+		// TODO added fall back
 	}
+
 	base := BasicGenerationParams {
 		bounds      = region_size[0],
 		min_spacing = 5.0,
@@ -142,6 +151,7 @@ level_init :: proc(level: ^Level, master_seed: u64, level_number: int) {
 	level.wave_count = wave_count_picker(level.level_number, wave_rng)
 	level.wave_index = 0
 	level.level_end = false
+	level.flee_prohibited = false
 
 	base := level_params.enemy_budget / level.wave_count
 	extra := level_params.enemy_budget % level.wave_count
@@ -173,7 +183,15 @@ level_init :: proc(level: ^Level, master_seed: u64, level_number: int) {
 
 		share = clamp(share + jitter, WAVE_ENEMY_FLOOR, MAX_ENEMIES)
 
-		wave_init(&level_params, &level.wave[i], wave_seed, share, level_number, i)
+		wave_init(
+			&level_params,
+			&level.wave[i],
+			wave_seed,
+			share,
+			level_number,
+			i,
+			level.flee_prohibited,
+		)
 	}
 
 }
@@ -223,7 +241,8 @@ wave_update :: proc(wave: ^Wave, bacteria: ^Bacteria, delta_time: f32) {
 		}
 	}
 	if !wave.threshold_crossed && wave.spawn_finished && wave.spawn_count > 0 {
-		if wave.destroyed_count * 1000 >= wave.spawn_count * wave.threshold_permille {
+		effective := wave_effective_threshold(wave, bacteria)
+		if wave.destroyed_count * 1000 >= wave.spawn_count * effective {
 			wave.threshold_crossed = true
 			fmt.printfln(
 				"[wave %v] threshold crossed: destroyed = %v/%v; permille = %v",
@@ -232,6 +251,7 @@ wave_update :: proc(wave: ^Wave, bacteria: ^Bacteria, delta_time: f32) {
 				wave.spawn_count,
 				wave.threshold_permille,
 			)
+			wave_flee_begin(wave, bacteria)
 		}
 	}
 
@@ -254,6 +274,53 @@ wave_update :: proc(wave: ^Wave, bacteria: ^Bacteria, delta_time: f32) {
 		}
 	}
 }
+
+wave_flee_begin :: proc(wave: ^Wave, bacteria: ^Bacteria) {
+	fleeing := 0
+	for i in 0 ..< MAX_ENEMIES {
+		if !bacteria.hot[i].active do continue
+		if bacteria.cold[i].wave_index != wave.index do continue
+		bacteria.cold[i].bacteria_state = .Fleeing
+		fleeing += 1
+		wave.flee_phase_active = true
+	}
+	if wave.flee_phase_active {
+		wave.flee_start_time = u64(sdl.GetTicks())
+		fmt.printfln("[wave %v] flee begin: fleeing=%v", wave.index, fleeing)
+	}
+}
+
+wave_flee_update :: proc(wave: ^Wave, bacteria: ^Bacteria, roster: ^ReturnRoster) {
+	if !wave.flee_phase_active do return
+	wave_flee_finish(wave, bacteria, roster)
+}
+
+wave_flee_finish :: proc(wave: ^Wave, bacteria: ^Bacteria, roster: ^ReturnRoster) {
+	for i in 0 ..< MAX_ENEMIES {
+		if !bacteria.hot[i].active do continue
+		if bacteria.cold[i].wave_index != wave.index do continue
+		entry := PendingBacteria {
+			species            = bacteria.hot[i].species,
+			buffs              = bacteria.cold[i].buffs,
+			buff_count         = bacteria.cold[i].buff_count,
+			waves_until_return = 1,
+		}
+		return_roster_push(roster, entry)
+		bacteria.hot[i].active = false
+		bacteria.cold[i].wave_index = OWNER_NONE
+		wave.fled_count += 1
+	}
+	wave.flee_phase_active = false
+	elapsed_ms := u64(sdl.GetTicks()) - wave.flee_start_time
+	fmt.printfln(
+		"[wave %v] flee finish: fled=%v; roster=%v; elapsed=%vms",
+		wave.index,
+		wave.fled_count,
+		roster.count,
+		elapsed_ms,
+	)
+}
+
 wave_dive_update :: proc(wave: ^Wave, bacteria: ^Bacteria, delta_time: f32) {
 	if !wave.formation_complete do return
 
@@ -282,7 +349,8 @@ wave_dive_update :: proc(wave: ^Wave, bacteria: ^Bacteria, delta_time: f32) {
 wave_resolution_update :: proc(level: ^Level) {
 	if level.wave[level.wave_index].spawn_finished &&
 	   level.wave[level.wave_index].spawn_count > 0 &&
-	   wave_resolved(&level.wave[level.wave_index]) == level.wave[level.wave_index].spawn_count {
+	   wave_resolved(&level.wave[level.wave_index]) == level.wave[level.wave_index].spawn_count &&
+	   !level.wave[level.wave_index].flee_phase_active {
 		fmt.printfln(
 			"[wave %v] resolved: destroyed=%v/%v; fled=%v",
 			level.wave_index,
@@ -361,4 +429,24 @@ threshold_picker :: proc(level: int, wave_rng: runtime.Random_Generator) -> int 
 
 wave_resolved :: proc(wave: ^Wave) -> int {
 	return wave.destroyed_count + wave.fled_count
+}
+
+wave_max_buff_count :: proc(wave: ^Wave, bacteria: ^Bacteria) -> int {
+	max_buffs := 0
+	for i in 0 ..< MAX_ENEMIES {
+		if !bacteria.hot[i].active do continue
+		if bacteria.cold[i].wave_index != wave.index do continue
+		if bacteria.cold[i].buff_count > max_buffs {
+			max_buffs = bacteria.cold[i].buff_count
+		}
+	}
+	return max_buffs
+}
+
+wave_effective_threshold :: proc(wave: ^Wave, bacteria: ^Bacteria) -> int {
+	return clamp(
+		wave.threshold_permille + FLEE_THRESHOLD_PER_BUFF * wave_max_buff_count(wave, bacteria),
+		500,
+		1000,
+	)
 }
