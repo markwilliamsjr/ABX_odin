@@ -64,15 +64,20 @@ Implemented:
   entry; this is unreachable until the animation gives the phase duration.
   `flee begin` and `flee finish` logs include candidate and fled counts and the
   elapsed phase time.
-- **Resistance buff scaffolding.** `BuffCategory` covers Hardy, Resistant,
-  Biofilm, and Frenzied. A five-slot buff list and `buff_count` live on
-  `BacteriaCold`; `BUFF_DEFS` holds magnitudes; `max_health` lives on
-  `BacteriaHot`; and `bacteria_buff_add` replaces the oldest slot when full. No
-  buff is rolled or applied yet.
+- **Resistance buff scaffolding and roll.** `BuffCategory` is ordered Hardy,
+  Resistant, Biofilm, and Frenzied, now frozen because it indexes the seeded
+  roll. A five-slot buff list and `buff_count` live on `BacteriaCold`; `BUFF_DEFS`
+  holds magnitudes; `max_health` lives on `BacteriaHot`; and `bacteria_buff_add`
+  replaces the oldest slot when full. `wave_flee_begin` rolls one category per
+  escaping bacterium from `derive_seed(wave.seed, .Buff, slot_index)` and
+  `wave_flee_finish` copies the result into the roster entry. No buff effect is
+  applied yet.
 - **Return roster.** `PendingBacteria` stores a species, buffs, and
   `waves_until_return`; `ReturnRoster` on `World` is a compact FIFO capped at
   `MAX_ENEMIES`, with the oldest entry at index 0. `world_init` initializes it
-  and `level_init` cannot clear it. Nothing enters or leaves the roster yet.
+  and `level_init` cannot clear it. Fled bacteria enter with delay one, and
+  `return_roster_tick` decrements every positive delay when a wave completes, so
+  an entry is due for the next wave. Nothing consumes the queue yet.
 - **App shell.** Menu, playing, and paused states; Esc pauses; `--debug` skips
   the menu. `Level_Transition` and `Game_Over` exist but do nothing.
 - **CLI.** `--debug`, `--seed`, `--level`, `--no-vsync`, and `--help`.
@@ -82,7 +87,7 @@ Implemented:
 
 Not yet implemented:
 
-- Fleeing animation, buff rolls, roster scheduling, and the return spawn path.
+- Fleeing animation and the return spawn path.
 - Resistance buff effects.
 - Real `Level_Transition` logic.
 - Clay UI, settings, skill tree, bosses, and adaptive wave composition.

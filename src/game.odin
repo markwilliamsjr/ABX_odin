@@ -170,7 +170,9 @@ world_update :: proc(game: ^Game, keystate: [^]u8, delta_time: f32) {
 				&game.world.return_roster,
 			)
 			wave_dive_update(&game.world.level.wave[level.wave_index], &level.bacteria, delta_time)
-			wave_resolution_update(&game.world.level)
+			if wave_resolution_update(&game.world.level) {
+				return_roster_tick(&game.world.return_roster)
+			}
 		}
 	case .Level_Transition:
 	case .Paused:

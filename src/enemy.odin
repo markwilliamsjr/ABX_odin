@@ -1,5 +1,7 @@
 package main
 
+import "base:runtime"
+import "core:fmt"
 import "core:math"
 import "core:math/rand"
 import sdl "vendor:sdl2"
@@ -34,10 +36,10 @@ BacteriaState :: enum {
 }
 
 BuffCategory :: enum {
-	Frenzied,
 	Hardy,
 	Resistant,
 	Biofilm,
+	Frenzied,
 }
 
 Sine_Dive :: struct {
@@ -584,4 +586,12 @@ return_roster_pop :: proc(roster: ^ReturnRoster) -> (PendingBacteria, bool) {
 	roster.count -= 1
 	roster.entries[roster.count] = {}
 	return entry, true
+}
+
+return_roster_tick :: proc(roster: ^ReturnRoster) {
+	for i in 0 ..< roster.count {
+		if roster.entries[i].waves_until_return > 0 {
+			roster.entries[i].waves_until_return -= 1
+		}
+	}
 }

@@ -280,6 +280,17 @@ wave_flee_begin :: proc(wave: ^Wave, bacteria: ^Bacteria) {
 	for i in 0 ..< MAX_ENEMIES {
 		if !bacteria.hot[i].active do continue
 		if bacteria.cold[i].wave_index != wave.index do continue
+		buff_rng_state := rand.create(derive_seed(wave.seed, .Buff, i))
+		buff_rng := runtime.default_random_generator(&buff_rng_state)
+		category := BuffCategory(rand.int_range(0, len(BUFF_DEFS), buff_rng))
+		bacteria_buff_add(&bacteria.cold[i], category)
+		fmt.printfln(
+			"[wave %v] flee: slot=%v buff=%v count=%v",
+			wave.index,
+			i,
+			category,
+			bacteria.cold[i].buff_count,
+		)
 		bacteria.cold[i].bacteria_state = .Fleeing
 		fleeing += 1
 		wave.flee_phase_active = true
@@ -346,7 +357,7 @@ wave_dive_update :: proc(wave: ^Wave, bacteria: ^Bacteria, delta_time: f32) {
 	}
 }
 
-wave_resolution_update :: proc(level: ^Level) {
+wave_resolution_update :: proc(level: ^Level) -> bool {
 	if level.wave[level.wave_index].spawn_finished &&
 	   level.wave[level.wave_index].spawn_count > 0 &&
 	   wave_resolved(&level.wave[level.wave_index]) == level.wave[level.wave_index].spawn_count &&
@@ -370,7 +381,9 @@ wave_resolution_update :: proc(level: ^Level) {
 			level.level_end = true
 			fmt.printfln("[level %v] end: waves=%v", level.level_number, level.wave_count)
 		}
+		return true
 	}
+	return false
 }
 
 // ---- Helper ----

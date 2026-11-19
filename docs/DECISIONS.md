@@ -560,6 +560,11 @@ deterministic and reads "positionally" as queue order.
   and chronological order stays readable in logs and a debugger.
 - Returners spawn with their preserved species and restored health, using the next
   wave's entry path and formation position.
+- The delay decrement runs at the completion of the wave the bacterium fled
+  from, after the flee phase has pushed it. A delay of one therefore means "due
+  for the next wave". This makes the update order load-bearing: flee finish must
+  run before wave resolution, or the entry misses its tick and returns a wave
+  late.
 
 ## Flee animation phase
 
@@ -730,6 +735,10 @@ simplicity and for greater variance in resulting stacks.
 - **Buff rolls are seeded.** The roll derives from a stored `Wave.seed` through a
   new `.Buff` seed category and the fleeing slot index. A wave flees once, so the
   slot index is unique within that roll.
+- **The roll is taken at flee begin.** The escaping pool slot carries the new
+  buff for the duration of the phase, and `wave_flee_finish` copies it into the
+  roster entry. A bacterium killed during the phase discards that roll with its
+  slot; nothing needs undoing.
 - **Phase 1.3 owns the scaffolding.** It adds the category enum, the five-slot
   array, `BUFF_DEFS`, and the seeded roll because the flee response needs them.
   Phase 1.4 applies the four effects and wires `species_unlocked` into spawning.
@@ -792,8 +801,11 @@ with `health` rather than with the buff list.
   reused slot. Any future spawn-params buffs must be applied after that clear.
 - `max_health` is base health in 1.3. The return path must compute the buffed
   value before restoring health, otherwise Hardy bacteria return at base health.
-- The `BuffCategory` ordinal becomes part of a seeded roll once the flee path
-  indexes the enum. Keep the enum order stable from that point on.
+- The `BuffCategory` ordinal is part of a seeded roll once the flee path indexes
+  the enum. The order is frozen as `Hardy, Resistant, Biofilm, Frenzied`.
+- `Hardy` is ordinal zero, so unused slots past `buff_count` read as `Hardy`.
+  Every consumer iterates to `buff_count` only; a full-array loop would silently
+  apply Hardy buffs.
 
 ## Bacteria identity and behavior
 

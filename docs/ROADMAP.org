@@ -85,9 +85,9 @@ Full detail: [[file:DECISIONS.md::Return queue mechanics][Return queue mechanics
 - [X] On crossing, start the zero-duration flee phase: mark remaining owned
       bacteria ~.Fleeing~ and keep them targetable; increment ~fled_count~ at
       phase finish.
-- [ ] Roll the buff at flee; replace the oldest when the 5 slots are full; store
+- [X] Roll the buff at flee; replace the oldest when the 5 slots are full; store
       it on the roster entry.
-- [ ] Queue each fled bacterium one wave ahead; decrement delays on wave
+- [X] Queue each fled bacterium one wave ahead; decrement delays on wave
       completion; drop the oldest roster entry when full.
 - [ ] On return, fill the next wave's existing spawn slots before fresh spawns;
       preserve species, apply buffs, and restore ~max_health~.
