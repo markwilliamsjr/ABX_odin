@@ -80,7 +80,8 @@ Implemented:
   an entry is due for the next wave. Due entries are consumed at spawn time
   before fresh bacteria, each taking one of the wave's existing slots with its
   species, buffs, and restored health preserved; overflow stays queued and a
-  full roster drops the oldest.
+  full roster drops the oldest. Return, roster push/drop, and flee-prohibited
+  logs report the flow.
 - **App shell.** Menu, playing, and paused states; Esc pauses; `--debug` skips
   the menu. `Level_Transition` and `Game_Over` exist but do nothing.
 - **CLI.** `--debug`, `--seed`, `--level`, `--no-vsync`, and `--help`.

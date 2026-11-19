@@ -91,6 +91,7 @@ wave_init :: proc(
 
 	if flee_prohibited {
 		wave.threshold_permille = 1000
+		fmt.printfln("[wave %v] flee prohibited", wave.index)
 	} else {
 		threshold_rng_state := rand.create(derive_seed(wave_seed, .Level, 0))
 		threshold_rng := runtime.default_random_generator(&threshold_rng_state)
@@ -340,6 +341,13 @@ wave_flee_finish :: proc(wave: ^Wave, bacteria: ^Bacteria, roster: ^ReturnRoster
 			waves_until_return = 1,
 		}
 		return_roster_push(roster, entry)
+		fmt.printfln(
+			"[roster] push: species=%v buffs=%v delay=%v roster=%v",
+			entry.species,
+			entry.buff_count,
+			entry.waves_until_return,
+			roster.count,
+		)
 		bacteria.hot[i].active = false
 		bacteria.cold[i].wave_index = OWNER_NONE
 		wave.fled_count += 1

@@ -1,5 +1,6 @@
 package main
 
+import "core:fmt"
 import "core:math"
 import "core:math/rand"
 import sdl "vendor:sdl2"
@@ -569,10 +570,18 @@ return_roster_push :: proc(roster: ^ReturnRoster, entry: PendingBacteria) {
 		roster.count += 1
 		return
 	}
+	dropped := roster.entries[0]
 	for i in 1 ..< MAX_ENEMIES {
 		roster.entries[i - 1] = roster.entries[i]
 	}
 	roster.entries[MAX_ENEMIES - 1] = entry
+	fmt.printfln(
+		"[roster] drop: species=%v buffs=%v delay=%v roster=%v",
+		dropped.species,
+		dropped.buff_count,
+		dropped.waves_until_return,
+		roster.count,
+	)
 }
 
 return_roster_pop :: proc(roster: ^ReturnRoster) -> (PendingBacteria, bool) {

@@ -264,6 +264,27 @@ Review notes not yet acted on:
   logs. All temporary edits were reverted; source hashes were unchanged.
 - The full-pool spawn-failure case and a phase kill remain untested at runtime.
 
+## 1.3 remaining logs (2026-11-19)
+
+- Three lines landed: `[roster] push` in `wave_flee_finish`, `[roster] drop` in
+  `return_roster_push`, and `[wave %v] flee prohibited` in `wave_init`.
+  Flee begin/finish, per-slot buff, and return logs already existed.
+- Both roster logs report `buff_count`, not the raw `buffs` array. The raw array
+  prints unused slots as `Hardy` (zero value), which reads like five buffs; the
+  specific category is already carried by the `flee: slot=` line.
+- The drop log captures `roster.entries[0]` before the shift loop. After the
+  loop, index 0 has been overwritten with `entries[1]`, so logging there would
+  name the wrong entry.
+- `core:fmt` returned to `src/enemy.odin` for the drop log; it is used, so the
+  deferred vet errors at gate 1.8 are unchanged.
+- Verified headlessly with temporary edits, all reverted and source hashes
+  matched: 48 near-cap preload + 4 fled produced two `drop` lines with
+  `roster=50` (cap held), push lines matched the flee lines on species and
+  buff count with delay 1, and the temporary flag logged `flee prohibited`
+  once per wave alongside `permille = 1000`.
+- `flee prohibited` is emitted at init, not at crossing, so it prints per wave
+  whether or not the wave actually flees.
+
 ## Current code state
 
 `odin check src` is clean. Roadmap 1.2 is implemented end to end: ownership,
@@ -273,8 +294,9 @@ All 1.3 mechanics are in place: buff scaffolding, the `.Buff` seed with
 zero-duration flee phase, the seeded buff roll, the delay tick, and the return
 spawn path. Due roster entries now lead each wave's spawns with species, buffs,
 and restored health preserved; overflow stays queued and the cap drops the
-oldest. No buff effect is applied yet: Hardy, Resistant, Biofilm, and Frenzied
-are stored but inert until 1.4.
+oldest. The return, roster push/drop, and flee-prohibited logs are in place.
+No buff effect is applied yet: Hardy, Resistant, Biofilm, and Frenzied are
+stored but inert until 1.4.
 `level_end` is written but unread until `.Level_Transition` lands in 1.5.
 
 Runtime verification: 1.3 flee and return was exercised headlessly with a
@@ -290,15 +312,17 @@ wave guard uses `<` and `wave_dive_update` is guarded, and the overlay reads
 
 ## Current task
 
-Roadmap 1.3, fleeing and returning. The return spawn path is implemented and
-verified; the remaining work is the roster, drop, and flee-prohibited logs.
-1.2 is complete; 1.6 verification stays outstanding behind 1.5.
+Roadmap 1.3, fleeing and returning, is complete: mechanics, return path, and
+logs are all implemented and verified. 1.2 is complete; 1.4 is next. 1.6
+verification stays outstanding behind 1.5.
 
 ## Next step
 
-Finish the 1.3 logs: add the roster-push, drop, and flee-prohibited lines (flee
-begin/finish, per-slot buff, and return logs already exist). Then start 1.4,
-resistance buff effects and `species_unlocked` wiring.
+Start 1.4, resistance buff effects: apply Hardy, Resistant, Biofilm, and
+Frenzied from `BUFF_DEFS`, and wire `species_unlocked` into spawning so
+`bacteria_spawn` stops hardcoding `.Strep`. Two open questions from
+`DECISIONS.md` block tuning, not implementation: Frenzied stacking, and
+Resistant's interaction with weapon weakness.
 
 `Level.end_chance` still needs confirming and removing before 1.5.
 
@@ -400,7 +424,11 @@ edits were reverted and the source hashes matched the pre-test state.
   returned in wave 3
 - same seed twice: same thresholds, roster contents, and buff rolls — passed;
   two runs produced byte-identical 72-line logs
-- flee-prohibited: passed; all six waves logged `permille = 1000`
+- flee-prohibited: passed; all six waves logged `flee prohibited` and
+  `permille = 1000`
+- 1.3 logs: passed; push lines matched flee lines on species and buff count with
+  delay 1, two `drop` lines fired on a near-full roster with `roster=50`, and
+  the flag logged once per wave
 - not covered: the full-pool spawn-failure path, and a phase kill (deferred to
   the animation step because the phase is zero-length)
 

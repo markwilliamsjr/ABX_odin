@@ -95,7 +95,7 @@ Full detail: [[file:DECISIONS.md::Return queue mechanics][Return queue mechanics
       only then allow advancement.
 - [X] Let carried bacteria flee again: fresh buff roll, fresh health restore, no
       escape counter.
-- [ ] Add the roster-push, drop, and flee-prohibited logs. The flee begin and
+- [X] Add the roster-push, drop, and flee-prohibited logs. The flee begin and
       finish logs (including phase elapsed time), the per-slot buff log, and
       the return log have landed.
 
