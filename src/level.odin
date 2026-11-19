@@ -1,7 +1,6 @@
 package main
 
 import "base:runtime"
-import "core:container/pool"
 import "core:fmt"
 import "core:math"
 import "core:math/rand"
@@ -197,7 +196,7 @@ level_init :: proc(level: ^Level, master_seed: u64, level_number: int) {
 }
 
 // ---- Update ----
-wave_update :: proc(wave: ^Wave, bacteria: ^Bacteria, delta_time: f32) {
+wave_update :: proc(wave: ^Wave, bacteria: ^Bacteria, roster: ^ReturnRoster, delta_time: f32) {
 	if !wave.spawn_finished {
 		wave.spawn_timer += delta_time
 		if wave.spawn_delay > wave.spawn_timer do return
@@ -223,15 +222,39 @@ wave_update :: proc(wave: ^Wave, bacteria: ^Bacteria, delta_time: f32) {
 			destination := wave.formation_positions[wave.spawn_region][wave.spawn_index]
 			path_data := generate_entry_path(wave.path, start, destination)
 
+			due := return_roster_front_due(roster)
+			species: BacteriaSpecies = .Strep
+			buff: [MAX_BUFFS]BuffCategory
+			buff_count := 0
+			if due {
+				entry := roster.entries[0]
+				species = entry.species
+				buff = entry.buffs
+				buff_count = entry.buff_count
+			}
+
 			params := BacteriaSpawnParams {
 				speed_scalar       = wave.speed_scalar,
 				path_data          = path_data,
 				formation_position = destination,
-				species            = .Strep,
 				wave_index         = wave.index,
+				species            = species,
+				buffs              = buff,
+				buff_count         = buff_count,
 			}
-			if bacteria_spawn(bacteria, &params) == -1 {
+			idx := bacteria_spawn(bacteria, &params)
+			if idx == -1 {
 				return
+			}
+			if due {
+				_, _ = return_roster_pop(roster)
+				fmt.printfln(
+					"[wave %v] return: slot=%v species=%v buffs=%v",
+					wave.index,
+					idx,
+					species,
+					buff_count,
+				)
 			}
 			wave.spawn_index += 1
 			wave.spawn_count += 1

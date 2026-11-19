@@ -2,8 +2,8 @@
 
 ## Date
 
-2026-11-19 (1.3 steps one–six; 1.2 complete 2026-11-05; earlier work 2026-11-01
-and 2026-10-31)
+2026-11-19 (1.3 steps one–six plus the return spawn path, verified; 1.2
+complete 2026-11-05; earlier work 2026-11-01 and 2026-10-31)
 
 ## Goal
 
@@ -245,22 +245,44 @@ Review notes not yet acted on:
 - No entry is ever observed at delay one between frames; delays above one are
   only reachable through a temporary test edit.
 
+## 1.3 return spawn path (2026-11-19)
+
+- `BacteriaSpawnParams` carries `buffs` and `buff_count`; `bacteria_init` copies
+  them onto the slot instead of clearing them, so a reused slot inherits the
+  roster entry's buffs while fresh spawns pass a zeroed array and count.
+- `wave_update` takes the roster, peeks `return_roster_front_due` at each spawn
+  tick, builds the same entry path and destination either way, and pops only
+  after `bacteria_spawn` succeeds. Species, buffs, and `wave_index` come from the
+  entry for a returner; fresh spawns still use `.Strep`.
+- Health is restored to base/max by `bacteria_init`; Hardy's magnitude stays a
+  placeholder until 1.4.
+- Verified headlessly with a temporary forced crossing under the dummy SDL
+  driver: returners lead each wave, buffs compound 1→5 with the cap holding,
+  health reads 6/6 on every return, one deferred entry returned a wave late, a
+  preloaded roster capped at 50 with the oldest dropped, flee-prohibited logged
+  1000‰ on all waves, and two same-seed runs produced byte-identical 72-line
+  logs. All temporary edits were reverted; source hashes were unchanged.
+- The full-pool spawn-failure case and a phase kill remain untested at runtime.
+
 ## Current code state
 
 `odin check src` is clean. Roadmap 1.2 is implemented end to end: ownership,
 counters, spawn termination, crossing, completion, advancement, and `level_end`.
-The 1.3 items through queue scheduling are in place: buff scaffolding, the
-`.Buff` seed with `Wave.seed`, the return roster, `flee_prohibited`, the
-effective threshold, the zero-duration flee phase, the seeded buff roll, and the
-delay tick. `fled_count` is nonzero, roster entries carry species, buffs, and a
-delay, and every delay reaches zero on the wave it fled from. Nothing consumes
-the roster yet and no buff effect is applied: there is no return spawn path and
-no Hardy, Resistant, Biofilm, or Frenzied behavior.
+All 1.3 mechanics are in place: buff scaffolding, the `.Buff` seed with
+`Wave.seed`, the return roster, `flee_prohibited`, the effective threshold, the
+zero-duration flee phase, the seeded buff roll, the delay tick, and the return
+spawn path. Due roster entries now lead each wave's spawns with species, buffs,
+and restored health preserved; overflow stays queued and the cap drops the
+oldest. No buff effect is applied yet: Hardy, Resistant, Biofilm, and Frenzied
+are stored but inert until 1.4.
 `level_end` is written but unread until `.Level_Transition` lands in 1.5.
 
-Runtime verification: the crossing checks were reported passing — boundary,
-set-once, shortfall denominator, and the zero-spawn guard. The resolution and
-advancement checks are not recorded.
+Runtime verification: 1.3 flee and return was exercised headlessly with a
+temporary forced crossing — return order, buff compounding, health restore,
+overflow, roster cap, flee-prohibited, and same-seed replay all passed. The 1.2
+crossing checks were reported passing — boundary, set-once, shortfall
+denominator, and the zero-spawn guard. The resolution and advancement checks
+are not recorded as standalone runs, though the 1.3 logs show both firing.
 
 Two issues recorded in earlier sessions are fixed in the current source: the
 wave guard uses `<` and `wave_dive_update` is guarded, and the overlay reads
@@ -268,30 +290,30 @@ wave guard uses `<` and `wave_dive_update` is guarded, and the overlay reads
 
 ## Current task
 
-Roadmap 1.3, fleeing and returning. The flee phase, the buff roll, and the delay
-tick are implemented; the return spawn path is next. 1.2 is complete; 1.6
-verification stays outstanding behind it.
+Roadmap 1.3, fleeing and returning. The return spawn path is implemented and
+verified; the remaining work is the roster, drop, and flee-prohibited logs.
+1.2 is complete; 1.6 verification stays outstanding behind 1.5.
 
 ## Next step
 
-Return spawn path: consume due roster entries at spawn time before fresh
-bacteria, each taking one of the wave's existing spawn slots. Preserve species,
-copy buffs onto the reused slot, restore `max_health` and health, and leave due
-overflow queued for the following wave.
+Finish the 1.3 logs: add the roster-push, drop, and flee-prohibited lines (flee
+begin/finish, per-slot buff, and return logs already exist). Then start 1.4,
+resistance buff effects and `species_unlocked` wiring.
 
 `Level.end_chance` still needs confirming and removing before 1.5.
 
 ## Open issues
 
 - `BUFF_DEFS` magnitudes are `1` placeholders; 1.4 owns tuning.
-- `src/enemy.odin` still imports `base:runtime` and `core:fmt`, both unused since
-  the roll moved inline. `odin check src` tolerates them; `odin check src -vet`
-  does not.
+- Remaining `odin check src -vet` errors are deferred to roadmap gate 1.8 at
+  the end of Phase 1: `ttf` in `debug.odin`, two unused `bacteria_def` locals in
+  `enemy.odin`, and `divers_count`/`potental_divers` in `procedural.odin`.
 - `BuffCategory`'s zero value is `Hardy`, so unused buff slots past `buff_count`
   read as Hardy. Any consumer must loop to `buff_count`.
 - Flee-rolled buffs are stored but never applied.
-- Roster entries reach delay zero but nothing consumes them, so the queue grows
-  across waves until the return spawn path lands.
+- The full-pool spawn-failure path in `wave_update` (no pop, no counter advance)
+  is structurally correct but untested at runtime; it needs a temporary edit
+  that fills all `MAX_ENEMIES` slots before a spawn tick.
 - Fleeing bacteria remain targetable, but the phase is zero-length in 1.3, so a
   phase kill cannot be observed and the counter rule is unverified.
 - `fled_count` settles at finish, which makes the resolution gate load-bearing;
@@ -363,14 +385,24 @@ under the dummy SDL video driver and was removed: empty pop, FIFO order, cap at
 - last wave: `level_end` is set and the tick still ran
 - same seed twice: same delays on the same frames
 
-1.3 flee and return: return path not yet run.
+1.3 flee and return: verified 2026-11-19 under the dummy SDL driver with a
+temporary forced crossing (no automated input can land kills). All temporary
+edits were reverted and the source hashes matched the pre-test state.
 
 - returners appear first in the next wave, preserve species, and spawn with
-  restored health and their buff
+  restored health and their buff — passed; `health=6/6` and `species=Strep`
+  on every return line across all six waves
 - a carried bacterium flees again: new buff, no escape counter; a sixth escape
-  replaces the oldest buff
-- a full roster drops the oldest; due overflow stays queued
-- same seed twice: same thresholds, roster contents, and buff rolls
+  replaces the oldest buff — passed; counts compound 1→2→3→4→5 and never
+  exceed five, with the cap replacing the oldest
+- a full roster drops the oldest; due overflow stays queued — passed; 48
+  preloaded + 4 fled left `roster=50`, and the one entry left queued by wave 2
+  returned in wave 3
+- same seed twice: same thresholds, roster contents, and buff rolls — passed;
+  two runs produced byte-identical 72-line logs
+- flee-prohibited: passed; all six waves logged `permille = 1000`
+- not covered: the full-pool spawn-failure path, and a phase kill (deferred to
+  the animation step because the phase is zero-length)
 
 1.2 crossing: reported passing.
 

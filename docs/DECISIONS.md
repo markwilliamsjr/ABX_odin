@@ -1205,3 +1205,32 @@ systems risks rework.
   Their interaction with fleeing-driven difficulty is an open question: two
   escalating systems can stack multiplicatively and quietly break difficulty
   tuning, so this should be decided before tuning begins.
+
+## Vet review cadence
+
+### Decision
+
+A vet review runs at the end of each top-level phase in `ROADMAP.org`, not after
+each numbered step within a phase. Each phase carries one gate: run
+`odin check src -vet` and resolve every finding before the phase is verified.
+
+### Reason
+
+`-vet` catches dead declarations left behind by refactors and stubs, not logic
+bugs. Running it after every small step would turn normal in-progress leftovers
+into blockers and slow iteration; running it never lets scaffolding accumulate.
+The phase boundary is already the project's verification boundary — "a phase
+starts when the one before it is verified" — so attaching the gate there adds no
+new cadence.
+
+### Consequences
+
+- Phase 1's gate is step 1.8, after the unit tests, not a check after each of
+  1.1 through 1.7. Phases 2–11 each carry a final checkbox item.
+- A phase is not verified while vet is dirty. The gate is a cleanup obligation,
+  not a claim about gameplay correctness; behavioral verification stays with
+  the phase's own tasks.
+- Vet work found mid-phase is deferred to that phase's gate. This supersedes
+  folding vet cleanup into an individual step such as 1.3.
+- The gate names `odin check src -vet` explicitly. If a `make vet` target is
+  added later, the gate text should point at it.

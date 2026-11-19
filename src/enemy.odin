@@ -1,7 +1,5 @@
 package main
 
-import "base:runtime"
-import "core:fmt"
 import "core:math"
 import "core:math/rand"
 import sdl "vendor:sdl2"
@@ -95,6 +93,8 @@ BacteriaSpawnParams :: struct {
 	formation_position: sdl.FPoint,
 	species:            BacteriaSpecies,
 	wave_index:         int,
+	buffs:              [MAX_BUFFS]BuffCategory,
+	buff_count:         int,
 }
 
 BacteriaDefinition :: struct {
@@ -269,8 +269,8 @@ bacteria_init :: proc(hot: ^BacteriaHot, cold: ^BacteriaCold, spawn_params: ^Bac
 	cold.current_segment = 0
 	cold.pause_timer = 0.0
 	cold.wave_index = spawn_params.wave_index
-	cold.buffs = {}
-	cold.buff_count = 0
+	cold.buffs = spawn_params.buffs
+	cold.buff_count = spawn_params.buff_count
 
 	switch hot.species {
 	case .Strep:
@@ -594,4 +594,9 @@ return_roster_tick :: proc(roster: ^ReturnRoster) {
 			roster.entries[i].waves_until_return -= 1
 		}
 	}
+}
+
+return_roster_front_due :: proc(roster: ^ReturnRoster) -> bool {
+	if roster.count == 0 do return false
+	return roster.entries[0].waves_until_return == 0
 }

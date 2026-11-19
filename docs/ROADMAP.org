@@ -89,14 +89,15 @@ Full detail: [[file:DECISIONS.md::Return queue mechanics][Return queue mechanics
       it on the roster entry.
 - [X] Queue each fled bacterium one wave ahead; decrement delays on wave
       completion; drop the oldest roster entry when full.
-- [ ] On return, fill the next wave's existing spawn slots before fresh spawns;
+- [X] On return, fill the next wave's existing spawn slots before fresh spawns;
       preserve species, apply buffs, and restore ~max_health~.
 - [X] Finish the flee phase: push to the roster, clear ownership, deactivate, and
       only then allow advancement.
-- [ ] Let carried bacteria flee again: fresh buff roll, fresh health restore, no
+- [X] Let carried bacteria flee again: fresh buff roll, fresh health restore, no
       escape counter.
-- [ ] Add roster, buff, return, drop, and flee-prohibited logs. The flee begin
-      and finish logs, including phase elapsed time, land with the phase.
+- [ ] Add the roster-push, drop, and flee-prohibited logs. The flee begin and
+      finish logs (including phase elapsed time), the per-slot buff log, and
+      the return log have landed.
 
 *** 1.4 Resistance buff effects
 
@@ -148,6 +149,11 @@ Full detail: [[file:DECISIONS.md::Return queue mechanics][Return queue mechanics
 - [ ] Use a local RNG in every test; the test runner seeds the global generator
       randomly.
 
+*** 1.8 Vet review
+
+- [ ] Run ~odin check src -vet~ and resolve every finding before closing Phase 1.
+      The phase is not verified while vet is dirty.
+
 ** Phase 2 — Determinism
 
 Make decisions tick-driven and keep wall-clock time for motion only.
@@ -159,6 +165,9 @@ Make decisions tick-driven and keep wall-clock time for motion only.
 - [ ] Make ~formation_complete~ tick-driven rather than derived from continuous
       motion.
 - [ ] Audit for further wall-clock reads feeding decisions.
+
+- [ ] **Vet review.** Run ~odin check src -vet~ and resolve every finding before
+      closing the phase. The phase is not verified while vet is dirty.
 
 ** Phase 3 — Frame pacing
 
@@ -173,6 +182,9 @@ Vsync is the normal pacer; the limiter exists only for the no-vsync path.
 - [ ] Correct the help text.
 - [ ] Verify: ~--vsync false~ at 60 fps, ~--fps 0~ unbounded, vsync on at monitor
       rate, ~--fps 144 --vsync false~ at 144.
+
+- [ ] **Vet review.** Run ~odin check src -vet~ and resolve every finding before
+      closing the phase. The phase is not verified while vet is dirty.
 
 ** Phase 4 — Clay UI foundation
 
@@ -193,6 +205,9 @@ command.
 - [ ] Port the debug overlay, then the menu, then settings.
 - [ ] Add the pending ~wave_index~ and ~enemy_count~ lines to the overlay.
 
+- [ ] **Vet review.** Run ~odin check src -vet~ and resolve every finding before
+      closing the phase. The phase is not verified while vet is dirty.
+
 ** Phase 5 — Settings menu
 
 - [ ] Add a settings page for vsync and the FPS cap.
@@ -201,6 +216,9 @@ command.
       backends where it fails.
 - [ ] Apply a new FPS target immediately and reset the deadline when it changes.
 - [ ] Keep ~--fps 0~ out of the menu; it is a testing value.
+
+- [ ] **Vet review.** Run ~odin check src -vet~ and resolve every finding before
+      closing the phase. The phase is not verified while vet is dirty.
 
 ** Phase 6 — Enemy behavior architecture
 
@@ -215,6 +233,9 @@ Separate species identity from reusable gameplay behaviors.
 - [ ] Add new bacteria using combinations of existing behaviors.
 - [ ] Verify behavior composition preserves seeded determinism.
 
+- [ ] **Vet review.** Run ~odin check src -vet~ and resolve every finding before
+      closing the phase. The phase is not verified while vet is dirty.
+
 ** Phase 7 — Skill tree
 
 - [ ] Node graph, persistence across levels, UI, stat application.
@@ -222,17 +243,26 @@ Separate species identity from reusable gameplay behaviors.
 - [ ] Do not start until advancement, procgen, and formation generation are
       solid.
 
+- [ ] **Vet review.** Run ~odin check src -vet~ and resolve every finding before
+      closing the phase. The phase is not verified while vet is dirty.
+
 ** Phase 8 — Boss fights
 
 - [ ] Hidden boss meter filling across levels, resetting after a boss.
 - [ ] Resolve the interaction with fleeing-driven difficulty before tuning.
 - [ ] Implement the fleeing-prohibited boss level (the flag lands in 1.3).
 
+- [ ] **Vet review.** Run ~odin check src -vet~ and resolve every finding before
+      closing the phase. The phase is not verified while vet is dirty.
+
 ** Phase 9 — Adaptive wave composition
 
 - [ ] Skew wave composition toward species the player is not killing.
 - [ ] Build the kill-count system this depends on.
 - [ ] Treat fleeing-and-returning as a partial realization, not the whole.
+
+- [ ] **Vet review.** Run ~odin check src -vet~ and resolve every finding before
+      closing the phase. The phase is not verified while vet is dirty.
 
 ** Phase 10 — Cross-platform release
 
@@ -245,7 +275,13 @@ Development stays Linux-only. Releases are built natively on each OS.
 - [ ] Extend ~scripts/build-clay.sh~ with per-OS branches only when the matrix
       exists.
 
+- [ ] **Vet review.** Run ~odin check src -vet~ and resolve every finding before
+      closing the phase. The phase is not verified while vet is dirty.
+
 ** Phase 11 — Documentation
 
 - [ ] Update ~SESSION.md~ when the current slice closes.
 - [ ] Keep ~PROJECT.md~'s Current State current as phases land.
+
+- [ ] **Vet review.** Run ~odin check src -vet~ and resolve every finding before
+      closing the phase. The phase is not verified while vet is dirty.

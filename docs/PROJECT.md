@@ -77,7 +77,10 @@ Implemented:
   `MAX_ENEMIES`, with the oldest entry at index 0. `world_init` initializes it
   and `level_init` cannot clear it. Fled bacteria enter with delay one, and
   `return_roster_tick` decrements every positive delay when a wave completes, so
-  an entry is due for the next wave. Nothing consumes the queue yet.
+  an entry is due for the next wave. Due entries are consumed at spawn time
+  before fresh bacteria, each taking one of the wave's existing slots with its
+  species, buffs, and restored health preserved; overflow stays queued and a
+  full roster drops the oldest.
 - **App shell.** Menu, playing, and paused states; Esc pauses; `--debug` skips
   the menu. `Level_Transition` and `Game_Over` exist but do nothing.
 - **CLI.** `--debug`, `--seed`, `--level`, `--no-vsync`, and `--help`.
@@ -87,7 +90,7 @@ Implemented:
 
 Not yet implemented:
 
-- Fleeing animation and the return spawn path.
+- Fleeing animation.
 - Resistance buff effects.
 - Real `Level_Transition` logic.
 - Clay UI, settings, skill tree, bosses, and adaptive wave composition.

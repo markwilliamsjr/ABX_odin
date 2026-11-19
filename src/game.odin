@@ -163,7 +163,12 @@ world_update :: proc(game: ^Game, keystate: [^]u8, delta_time: f32) {
 		bacteria_update(&level.bacteria, delta_time, game.world.player.x)
 		collision_update(&game.world.bullets, level)
 		if level.wave_index < level.wave_count {
-			wave_update(&game.world.level.wave[level.wave_index], &level.bacteria, delta_time)
+			wave_update(
+				&game.world.level.wave[level.wave_index],
+				&level.bacteria,
+				&game.world.return_roster,
+				delta_time,
+			)
 			wave_flee_update(
 				&game.world.level.wave[level.wave_index],
 				&level.bacteria,
