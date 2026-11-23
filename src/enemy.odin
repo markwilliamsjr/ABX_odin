@@ -1,5 +1,6 @@
 package main
 
+import "base:runtime"
 import "core:fmt"
 import "core:math"
 import "core:math/rand"
@@ -132,6 +133,7 @@ BacteriaCold :: struct {
 	dive_initialized, return_initialized, should_flee: bool,
 	formation_point, return_start_points:              sdl.FPoint,
 	wave_index:                                        int,
+	biofilm_hits:                                      int,
 }
 
 PendingBacteria :: struct {
@@ -185,11 +187,11 @@ BACTERIA_DEFS := [BacteriaSpecies]BacteriaDefinition {
 		g = 200,
 		b = 0,
 		health = 6,
-		base_speed = 300.0,
-		width = 50,
-		height = 50,
-		hb_width = 50,
-		hb_height = 50,
+		base_speed = 200.0,
+		width = 16,
+		height = 16,
+		hb_width = 16,
+		hb_height = 16,
 		offset_x = 0,
 		offset_y = 0,
 		frame_count = 1,
@@ -203,10 +205,10 @@ BACTERIA_DEFS := [BacteriaSpecies]BacteriaDefinition {
 		b = 200,
 		health = 6,
 		base_speed = 300.0,
-		width = 50,
-		height = 50,
-		hb_height = 50,
-		hb_width = 50,
+		width = 16,
+		height = 16,
+		hb_height = 16,
+		hb_width = 16,
 		offset_x = 0,
 		offset_y = 0,
 		frame_count = 1,
@@ -220,10 +222,10 @@ BACTERIA_DEFS := [BacteriaSpecies]BacteriaDefinition {
 		b = 200,
 		health = 6,
 		base_speed = 400.0,
-		width = 50,
-		height = 50,
-		hb_width = 50,
-		hb_height = 50,
+		width = 16,
+		height = 16,
+		hb_width = 16,
+		hb_height = 16,
 		offset_x = 0,
 		offset_y = 0,
 		frame_count = 1,
@@ -238,6 +240,8 @@ BUFF_DEFS := [BuffCategory]BuffDefinition {
 	.Resistant = {max_magnitude = 800},
 	.Biofilm = {max_magnitude = 10},
 }
+
+BUFF_FRACTION_BANDS :: [5][2]int{{20, 40}, {100, 200}, {200, 400}, {300, 600}, {500, 1000}}
 // ---- Init ----
 bacteria_init :: proc(hot: ^BacteriaHot, cold: ^BacteriaCold, spawn_params: ^BacteriaSpawnParams) {
 	bacteria_def := get_bacteria_def(spawn_params.species)
@@ -248,7 +252,6 @@ bacteria_init :: proc(hot: ^BacteriaHot, cold: ^BacteriaCold, spawn_params: ^Bac
 	hot.hb_width = bacteria_def.hb_width
 	hot.offset_x = bacteria_def.offset_x
 	hot.offset_y = bacteria_def.offset_y
-	hot.health = hot.max_health
 	hot.active = true
 	hot.species = spawn_params.species
 	hot.x = spawn_params.path_data.control_points[0].x
@@ -272,13 +275,26 @@ bacteria_init :: proc(hot: ^BacteriaHot, cold: ^BacteriaCold, spawn_params: ^Bac
 	cold.wave_index = spawn_params.wave_index
 	cold.buffs = spawn_params.buffs
 	cold.buff_count = spawn_params.buff_count
+	cold.biofilm_hits = 0
+
+
+	hardy := buff_total(cold, .Hardy)
+	if hardy > 0 do hot.max_health = bacteria_def.health + max(1, bacteria_def.health * hardy / 100)
+
+	frezied := buff_total(cold, .Frenzied)
+	if frezied > 0 do cold.speed = f32(bacteria_def.base_speed) * cold.speed_scalar * (1.0 + f32(frezied) / 100.0)
+
+	hot.health = hot.max_health
 
 	switch hot.species {
 	case .Strep:
 		cold.entry_path_length = estimate_bezier_arc_length(cold.entry_path)
 	case .Staph:
+		cold.entry_path_length = estimate_bezier_arc_length(cold.entry_path)
 	case .Ecoli:
+		cold.entry_path_length = estimate_bezier_arc_length(cold.entry_path)
 	case .Pseudomonas:
+		cold.entry_path_length = estimate_bezier_arc_length(cold.entry_path)
 	}
 
 }
@@ -341,8 +357,26 @@ bacteria_return_init :: proc(hot: ^BacteriaHot, cold: ^BacteriaCold, delta_time:
 		)
 		cold.entry_path_length = estimate_bezier_arc_length(cold.entry_path)
 	case .Staph:
+		cold.entry_path = generate_entry_path(
+			.Line_Ish,
+			cold.return_start_points,
+			cold.formation_point,
+		)
+		cold.entry_path_length = estimate_bezier_arc_length(cold.entry_path)
 	case .Ecoli:
+		cold.entry_path = generate_entry_path(
+			.Line_Ish,
+			cold.return_start_points,
+			cold.formation_point,
+		)
+		cold.entry_path_length = estimate_bezier_arc_length(cold.entry_path)
 	case .Pseudomonas:
+		cold.entry_path = generate_entry_path(
+			.Line_Ish,
+			cold.return_start_points,
+			cold.formation_point,
+		)
+		cold.entry_path_length = estimate_bezier_arc_length(cold.entry_path)
 	}
 }
 
@@ -370,8 +404,54 @@ bacteria_enter_update :: proc(hot: ^BacteriaHot, cold: ^BacteriaCold, delta_time
 		hot.angle = calculate_bezier_angle(cold.entry_path, cold.t)
 
 	case .Staph:
+		cold.t += (cold.speed * delta_time) / cold.entry_path_length
+
+		if cold.t >= 1.0 {
+			cold.bacteria_state = .Holding
+			cold.t = 1.0
+			cold.state_start_time = u64(sdl.GetTicks())
+			hot.x = cold.formation_point.x
+			hot.y = cold.formation_point.y
+		}
+
+		pos := bezier_calc(cold.entry_path, cold.t)
+		hot.x = pos.x
+		hot.y = pos.y
+
+		hot.angle = calculate_bezier_angle(cold.entry_path, cold.t)
+
 	case .Ecoli:
+		cold.t += (cold.speed * delta_time) / cold.entry_path_length
+
+		if cold.t >= 1.0 {
+			cold.bacteria_state = .Holding
+			cold.t = 1.0
+			cold.state_start_time = u64(sdl.GetTicks())
+			hot.x = cold.formation_point.x
+			hot.y = cold.formation_point.y
+		}
+
+		pos := bezier_calc(cold.entry_path, cold.t)
+		hot.x = pos.x
+		hot.y = pos.y
+
+		hot.angle = calculate_bezier_angle(cold.entry_path, cold.t)
 	case .Pseudomonas:
+		cold.t += (cold.speed * delta_time) / cold.entry_path_length
+
+		if cold.t >= 1.0 {
+			cold.bacteria_state = .Holding
+			cold.t = 1.0
+			cold.state_start_time = u64(sdl.GetTicks())
+			hot.x = cold.formation_point.x
+			hot.y = cold.formation_point.y
+		}
+
+		pos := bezier_calc(cold.entry_path, cold.t)
+		hot.x = pos.x
+		hot.y = pos.y
+
+		hot.angle = calculate_bezier_angle(cold.entry_path, cold.t)
 	}
 }
 
@@ -382,8 +462,11 @@ bacteria_hold_update :: proc(hot: ^BacteriaHot, cold: ^BacteriaCold, delta_time:
 	case .Strep:
 		hot.angle = hot.angle + (0.0 - hot.angle) * (delta_time * 2.0)
 	case .Staph:
+		hot.angle = hot.angle + (0.0 - hot.angle) * (delta_time * 2.0)
 	case .Ecoli:
+		hot.angle = hot.angle + (0.0 - hot.angle) * (delta_time * 2.0)
 	case .Pseudomonas:
+		hot.angle = hot.angle + (0.0 - hot.angle) * (delta_time * 2.0)
 	}
 }
 
@@ -474,8 +557,50 @@ bacteria_return_update :: proc(hot: ^BacteriaHot, cold: ^BacteriaCold, delta_tim
 
 		hot.angle = calculate_bezier_angle(cold.entry_path, cold.t)
 	case .Staph:
+		cold.t += (cold.speed * delta_time) / cold.entry_path_length
+
+		if cold.t >= 1.0 {
+			cold.bacteria_state = .Holding
+			cold.t = 1.0
+			cold.state_start_time = u64(sdl.GetTicks())
+			hot.x = cold.formation_point.x
+			hot.y = cold.formation_point.y
+		}
+		pos := bezier_calc(cold.entry_path, cold.t)
+		hot.x = pos.x
+		hot.y = pos.y
+
+		hot.angle = calculate_bezier_angle(cold.entry_path, cold.t)
 	case .Ecoli:
+		cold.t += (cold.speed * delta_time) / cold.entry_path_length
+
+		if cold.t >= 1.0 {
+			cold.bacteria_state = .Holding
+			cold.t = 1.0
+			cold.state_start_time = u64(sdl.GetTicks())
+			hot.x = cold.formation_point.x
+			hot.y = cold.formation_point.y
+		}
+		pos := bezier_calc(cold.entry_path, cold.t)
+		hot.x = pos.x
+		hot.y = pos.y
+
+		hot.angle = calculate_bezier_angle(cold.entry_path, cold.t)
 	case .Pseudomonas:
+		cold.t += (cold.speed * delta_time) / cold.entry_path_length
+
+		if cold.t >= 1.0 {
+			cold.bacteria_state = .Holding
+			cold.t = 1.0
+			cold.state_start_time = u64(sdl.GetTicks())
+			hot.x = cold.formation_point.x
+			hot.y = cold.formation_point.y
+		}
+		pos := bezier_calc(cold.entry_path, cold.t)
+		hot.x = pos.x
+		hot.y = pos.y
+
+		hot.angle = calculate_bezier_angle(cold.entry_path, cold.t)
 	}
 }
 
@@ -608,4 +733,27 @@ return_roster_tick :: proc(roster: ^ReturnRoster) {
 return_roster_front_due :: proc(roster: ^ReturnRoster) -> bool {
 	if roster.count == 0 do return false
 	return roster.entries[0].waves_until_return == 0
+}
+
+buff_fraction_permille :: proc(level: int, rng: runtime.Random_Generator) -> int {
+	bands := BUFF_FRACTION_BANDS
+	block := min((level - 1) / 5, len(BUFF_FRACTION_BANDS) - 1)
+	lo, hi := bands[block][0], bands[block][1]
+	return rand.int_range(lo, hi + 1, rng)
+}
+
+buff_total :: proc(cold: ^BacteriaCold, catergory: BuffCategory) -> int {
+	def := BUFF_DEFS[catergory]
+	total := 0
+	present := false
+
+	for i in 0 ..< cold.buff_count {
+		slot := cold.buffs[i]
+		if slot.category != catergory do continue
+		present := true
+		total += def.max_magnitude * slot.fraction / 1000
+	}
+	if total > def.max_magnitude do total = def.max_magnitude
+	if catergory == .Biofilm && present && total < 1 do total = 1
+	return total
 }

@@ -80,6 +80,7 @@ wave_init :: proc(
 	wave.destroyed_count = 0
 	wave.fled_count = 0
 	wave.spawn_region = 0
+	wave.species_unlocked = wp.species_unlocked
 
 	wave.threshold_crossed = false
 	wave.formation_complete = false
@@ -225,13 +226,18 @@ wave_update :: proc(wave: ^Wave, bacteria: ^Bacteria, roster: ^ReturnRoster, del
 
 			due := return_roster_front_due(roster)
 			species: BacteriaSpecies = .Strep
-			buff: [MAX_BUFFS]BuffCategory
+			buff: [MAX_BUFFS]BuffInstance
 			buff_count := 0
 			if due {
 				entry := roster.entries[0]
 				species = entry.species
 				buff = entry.buffs
 				buff_count = entry.buff_count
+			} else {
+				rng_state := rand.create(derive_seed(wave.seed, .Wave, 1 + wave.spawn_index))
+				rng := runtime.default_random_generator(&rng_state)
+				count := min(wave.species_unlocked, len(BACTERIA_DEFS))
+				species = BacteriaSpecies(rand.int_range(0, count, rng))
 			}
 
 			params := BacteriaSpawnParams {
@@ -275,7 +281,7 @@ wave_update :: proc(wave: ^Wave, bacteria: ^Bacteria, roster: ^ReturnRoster, del
 				wave.spawn_count,
 				wave.threshold_permille,
 			)
-			wave_flee_begin(wave, bacteria)
+			wave_flee_begin(wave, bacteria, wave.level)
 		}
 	}
 
@@ -299,7 +305,7 @@ wave_update :: proc(wave: ^Wave, bacteria: ^Bacteria, roster: ^ReturnRoster, del
 	}
 }
 
-wave_flee_begin :: proc(wave: ^Wave, bacteria: ^Bacteria) {
+wave_flee_begin :: proc(wave: ^Wave, bacteria: ^Bacteria, level: int) {
 	fleeing := 0
 	for i in 0 ..< MAX_ENEMIES {
 		if !bacteria.hot[i].active do continue
@@ -307,12 +313,14 @@ wave_flee_begin :: proc(wave: ^Wave, bacteria: ^Bacteria) {
 		buff_rng_state := rand.create(derive_seed(wave.seed, .Buff, i))
 		buff_rng := runtime.default_random_generator(&buff_rng_state)
 		category := BuffCategory(rand.int_range(0, len(BUFF_DEFS), buff_rng))
-		bacteria_buff_add(&bacteria.cold[i], category)
+		fraction := buff_fraction_permille(level, buff_rng)
+		bacteria_buff_add(&bacteria.cold[i], {category, fraction})
 		fmt.printfln(
-			"[wave %v] flee: slot=%v buff=%v count=%v",
+			"[wave %v] flee: slot=%v cat=%v fraction=%v count=%v",
 			wave.index,
 			i,
 			category,
+			fraction,
 			bacteria.cold[i].buff_count,
 		)
 		bacteria.cold[i].bacteria_state = .Fleeing
