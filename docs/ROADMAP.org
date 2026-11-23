@@ -147,7 +147,8 @@ Plan: [[file:plans/archive/1.5-level-transition.md][1.5 implementation steps
 
 *** 1.6 Verify the slice
 
-Plan: [[file:plans/1.6-verify-the-slice.md][1.6 verification steps]].
+Plan: [[file:plans/archive/1.6-verify-the-slice.md][1.6 verification steps
+(archived)]].
 
 - [X] Verify no seed collision across levels.
 - [X] Seeded replay: same seed, two runs, identical wave composition,

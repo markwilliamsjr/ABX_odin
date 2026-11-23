@@ -2,6 +2,7 @@
 
 ## Date
 
+2026-11-23 (1.6 verified; plan archived; Biofilm floor fix recorded)
 2026-11-23 (1.5 implemented and archived; docs updated)
 2026-11-23 (1.4 implemented; species dives are placeholders)
 2026-11-21 (1.4 decisions settled and docs updated; implementation not started)
@@ -417,12 +418,12 @@ are in `/tmp/opencode/1.6/`.
   Frenzied raised Strep speed from 170.0 to 416.5; Resistant at 400 permille
   reduced damage 10→6; Biofilm at ceiling 2 absorbed two hits then passed 10.
 
-**Problem discovered.** `buff_total` in `src/enemy.odin` shadows `present` with
-`present := true` inside its loop, so the outer flag never becomes true and the
-`.Biofilm` floor at the end of the proc never fires. A low early Biofilm roll
-(e.g. 20 permille of ceiling 10 = 0) absorbs **zero** hits, contradicting
-DECISIONS "Buff magnitude scaling". Not fixed during verification; it needs a
-source edit by the developer.
+**Problem discovered and fixed.** `buff_total` in `src/enemy.odin` shadowed
+`present` with `present := true` inside its loop, so the outer flag never became
+true and the `.Biofilm` floor at the end of the proc never fired. A low early
+Biofilm roll (e.g. 20 permille of ceiling 10 = 0) absorbed **zero** hits,
+contradicting DECISIONS "Buff magnitude scaling". The developer changed it to
+`present = true` after verification; the fix is in the 1.6 commit.
 
 **Harness labeling note.** The temporary self-test printed a wrong expectation
 for Resistant (`(expect 5)`); 400 permille of the 800 ceiling is 400 permille,
@@ -456,23 +457,20 @@ wave guard uses `<` and `wave_dive_update` is guarded, and the overlay reads
 Roadmap 1.6 verification is complete. All nine boxes are ticked in
 `ROADMAP.org`; the phase-kill half of one box is annotated as deferred to the
 flee animation. Source was restored byte-for-byte after the temporary
-instrumentation and `odin check src` is clean. The 1.6 plan is active at
-`docs/plans/1.6-verify-the-slice.md`; step plans live under `docs/plans/` and
-completed plans move to `docs/plans/archive/`.
+instrumentation and `odin check src` is clean. The 1.6 plan is archived with an
+Outcome at `docs/plans/archive/1.6-verify-the-slice.md`, and the roadmap link
+points there. The Biofilm floor fix landed in the same commit.
 
 ## Next step
 
-Fix the `buff_total` `present` shadowing bug recorded above, then start roadmap
-1.7 (unit tests). The test seam is still undecided: drive `level_init` end to
-end, or extract the budget split and jitter into a pure helper first. Keep the
-verification method temporary — 1.7 owns the automated seam. The phase-kill
-check and the full-pool spawn-failure path remain outstanding for later steps.
+Start roadmap 1.7 (unit tests). The test seam is still undecided: drive
+`level_init` end to end, or extract the budget split and jitter into a pure
+helper first. Keep the verification method temporary — 1.7 owns the automated
+seam. The phase-kill check and the full-pool spawn-failure path remain
+outstanding for later steps.
 
 ## Open issues
 
-- **`buff_total` shadows `present`** with `present := true` inside its loop, so
-  the Biofilm one-hit floor never fires; a low early Biofilm roll absorbs zero
-  hits. Found in 1.6 verification, not fixed. See the 1.6 section above.
 - `BUFF_DEFS` ceilings and `BUFF_FRACTION_BANDS` are first-pass tuning values,
   not architecture.
 - Weapon damage is a flat `3` for Neutral, PCN, and PMX; differentiation is

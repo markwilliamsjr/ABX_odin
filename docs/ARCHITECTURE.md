@@ -216,9 +216,12 @@ A wave's index within its level is its seed key, so a wave seed is a pure functi
 of `(run seed, level, wave index)` and needs no run history to recompute. The wave
 stores its seed so flee-time buff rolls can derive from it after initialization.
 
-The invariant is that no `(parent_seed, category, number)` triple is ever reached
-twice in a run. The same `(category, number)` under a *different* parent is fine —
-this is what lets `.Level` name both a level and a decision made within it.
+The invariant is per parent: no `(parent_seed, category, number)` triple may be
+used for two different generated values. The same `(category, number)` under a
+*different* parent is fine — this is what lets `.Level` name both a level and a
+decision made within it. A triple may be re-derived when a spawn is retried;
+`derive_seed` is pure, so the retry produces the same value. See `DECISIONS.md`
+"Seeding" for the eight triples and the retry caveat.
 
 ## Determinism
 
