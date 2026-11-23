@@ -114,18 +114,22 @@ removed]]. Three substeps, in order.
 
 **** B. Apply buff effects
 
-- [ ] Add ~BuffInstance~ with category + rolled fraction; store it on the cold
+- [x] Add ~BuffInstance~ with category + rolled fraction; store it on the cold
       pool, spawn params, and roster entries.
-- [ ] Add the block fraction table, the seeded fraction draw, and the per-category
+- [x] Add the block fraction table, the seeded fraction draw, and the per-category
       total cap helper.
-- [ ] Apply ~Hardy~ and ~Frenzied~ in ~bacteria_init~; ~Resistant~ and ~Biofilm~ at
+- [x] Apply ~Hardy~ and ~Frenzied~ in ~bacteria_init~; ~Resistant~ and ~Biofilm~ at
       the damage site.
-- [ ] Thread ~level_number~ into the flee roll; log the fraction.
+- [x] Thread ~level_number~ into the flee roll; log the fraction.
 
 **** C. Wire species variety
 
-- [ ] Pick fresh-spawn species from ~Wave.species_unlocked~ with a seeded draw;
+- [x] Pick fresh-spawn species from ~Wave.species_unlocked~ with a seeded draw;
       stop hardcoding ~.Strep~.
+- [x] Give E. coli and Pseudomonas minimal placeholder dive movement and return
+      setup so all four species are playable. Per-species entry, hold, dive, and
+      return behavior is Phase 6 work; the current shared blocks are duplicated
+      placeholders.
 
 *** 1.5 Level transition
 
@@ -247,6 +251,8 @@ Separate species identity from reusable gameplay behaviors.
 - [ ] Define reusable group behaviors.
 - [ ] Define reusable lifecycle behaviors.
 - [ ] Refactor the existing four species to compose these behaviors.
+- [ ] Replace the duplicated placeholder entry, hold, dive, and return blocks
+      with per-species behaviors; have Frenzied reach every species' dive speed.
 - [ ] Add new bacteria using combinations of existing behaviors.
 - [ ] Verify behavior composition preserves seeded determinism.
 

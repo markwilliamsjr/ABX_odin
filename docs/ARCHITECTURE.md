@@ -12,8 +12,9 @@ Bacteria spawn in procedurally generated formations. After each level the player
 levels up and is presented with a Path of Exile like skill tree to upgrade their
 antibiotic. The tree unlocks weapons (the player starts with Neutral only) and
 grants both active abilities and passive stat nodes. Weapons are strong on their
-own — there is no weapon-versus-bacteria weakness system — and are differentiated
-by a damage-versus-fire-rate tradeoff.
+own — there is no weapon-versus-bacteria weakness system — and will be
+differentiated by a damage-versus-fire-rate tradeoff. Until that tuning lands,
+the current weapon damage values are placeholders.
 
 As the player moves through levels, different types of bacteria become able to
 spawn.

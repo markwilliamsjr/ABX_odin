@@ -234,7 +234,7 @@ collision_update :: proc(bullet: ^Bullets, level: ^Level) {
 				bullet.height[i],
 			)
 			if collision {
-				hot.health -= weapon_def.damage
+				hot.health -= bacteria_dmg_after_buffs(cold, weapon_def.damage)
 				if hot.health <= 0 {
 					owner := cold.wave_index
 					hot.active = false
@@ -387,6 +387,14 @@ check_collision :: proc(
 		return false
 	}
 	return true
+}
+
+bacteria_dmg_after_buffs :: proc(cold: ^BacteriaCold, dmg: int) -> int {
+	if cold.biofilm_hits < buff_total(cold, .Biofilm) {
+		cold.biofilm_hits += 1
+		return 0
+	}
+	return max(1, dmg - dmg * buff_total(cold, .Resistant) / 1000)
 }
 
 // ---- Render ----

@@ -29,12 +29,15 @@ Implemented:
 
 - **Player.** Movement, firing, bullets, and bullet/bacteria collision. Only
   Neutral ammo exists in code: `current_ammo` is set at init and never changed;
-  there is no switching control. Weapon weakness currently branches damage into
-  effective / neutral / ineffective tiers; its removal is 1.4 substep A.
+  there is no switching control. Weapon weakness is gone: `WeaponDefinition`
+  carries a single `damage` value. Neutral, PCN, and PMX are all `damage = 3`
+  placeholders until Phase 7 tuning.
 - **Bacteria.** Species definitions for Strep, Staph, E. coli, and Pseudomonas;
   a flat cold/hot SoA pool owned by the level; spawning, movement, diving, and
-  rendering. Each bacterium stores its owning wave index, with `-1` meaning not
-  in play; the slot is cleared at death.
+  rendering. All four species enter, hold, dive, and return. The non-Strep
+  entry/hold/dive/return code is duplicated placeholder behavior until each
+  species gets bespoke motion in Phase 6. Each bacterium stores its owning wave
+  index, with `-1` meaning not in play; the slot is cleared at death.
 - **Levels and waves.** Seeded level and wave seeds; per-level wave count; the
   `3 + level*2` enemy budget split across waves with a floor of 3; per-wave
   count jitter; `wave_index`; all drawn waves initialized at level start. Each
@@ -66,14 +69,25 @@ Implemented:
   entry; this is unreachable until the animation gives the phase duration.
   `flee begin` and `flee finish` logs include candidate and fled counts and the
   elapsed phase time.
-- **Resistance buff scaffolding and roll.** `BuffCategory` is ordered Hardy,
-  Resistant, Biofilm, and Frenzied, now frozen because it indexes the seeded
-  roll. A five-slot buff list and `buff_count` live on `BacteriaCold`; `BUFF_DEFS`
-  holds magnitudes; `max_health` lives on `BacteriaHot`; and `bacteria_buff_add`
-  replaces the oldest slot when full. `wave_flee_begin` rolls one category per
-  escaping bacterium from `derive_seed(wave.seed, .Buff, slot_index)` and
-  `wave_flee_finish` copies the result into the roster entry. No buff effect is
-  applied yet.
+- **Resistance buffs.** `BuffCategory` is ordered Hardy, Resistant, Biofilm,
+  and Frenzied, frozen because it indexes the seeded roll. A buff is a
+  `BuffInstance` (category plus a rolled permille fraction of the category
+  ceiling from `BUFF_DEFS`); up to five are stored per bacterium and on roster
+  entries. The fraction is drawn from the 5-level block bands. `buff_total`
+  converts each slot and caps the sum at the category ceiling.
+  - Hardy raises `max_health` at spawn.
+  - Frenzied raises `speed` at spawn; it currently affects only Strep entry and
+    dive motion.
+  - Resistant reduces incoming damage, floored at 1, at the damage site.
+  - Biofilm absorbs a capped number of hits, reset on spawn.
+  `wave_flee_begin` rolls one category and fraction per escaping bacterium from
+  `derive_seed(wave.seed, .Buff, slot_index)`; `wave_flee_finish` copies the
+  result into the roster entry.
+- **Species variety.** Fresh spawns draw a species from
+  `derive_seed(wave.seed, .Wave, 1 + spawn_index)` against
+  `min(species_unlocked, len(BACTERIA_DEFS))`. Level 1 draws Strep only; Staph,
+  E. coli, and Pseudomonas unlock every five levels. Returners keep their stored
+  species.
 - **Return roster.** `PendingBacteria` stores a species, buffs, and
   `waves_until_return`; `ReturnRoster` on `World` is a compact FIFO capped at
   `MAX_ENEMIES`, with the oldest entry at index 0. `world_init` initializes it
@@ -94,7 +108,8 @@ Implemented:
 Not yet implemented:
 
 - Fleeing animation.
-- Resistance buff effects.
+- Per-species entry, hold, dive, and return behavior; the current non-Strep paths
+  are placeholders (Phase 6). Frenzied does not yet affect their dive speeds.
 - Weapon switching and unlocks (Phase 7).
 - Real `Level_Transition` logic.
 - Clay UI, settings, skill tree, bosses, and adaptive wave composition.

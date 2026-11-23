@@ -281,8 +281,8 @@ bacteria_init :: proc(hot: ^BacteriaHot, cold: ^BacteriaCold, spawn_params: ^Bac
 	hardy := buff_total(cold, .Hardy)
 	if hardy > 0 do hot.max_health = bacteria_def.health + max(1, bacteria_def.health * hardy / 100)
 
-	frezied := buff_total(cold, .Frenzied)
-	if frezied > 0 do cold.speed = f32(bacteria_def.base_speed) * cold.speed_scalar * (1.0 + f32(frezied) / 100.0)
+	frenzied := buff_total(cold, .Frenzied)
+	if frenzied > 0 do cold.speed = f32(bacteria_def.base_speed) * cold.speed_scalar * (1.0 + f32(frenzied) / 100.0)
 
 	hot.health = hot.max_health
 
@@ -500,6 +500,7 @@ bacteria_dive_update :: proc(
 		if hot.y > SCREEN_HEIGHT {
 			cold.bacteria_state = .Returning
 			cold.dive_initialized = false
+			cold.return_initialized = false
 			cold.return_start_points = {hot.x, 0 - f32(hot.height)}
 			cold.t = 0.0
 		}
@@ -532,10 +533,62 @@ bacteria_dive_update :: proc(
 			if hot.y > SCREEN_HEIGHT {
 				cold.bacteria_state = .Returning
 				cold.dive_initialized = false
+				cold.return_initialized = false
+				cold.return_start_points = {hot.x, 0 - f32(hot.height)}
+				cold.t = 0.0
 			}
 		}
 	case Zigzag_Dive:
+		dive.timer += delta_time
+		if dive.timer >= dive.cooldown {
+			dive.direction = -dive.direction
+			dive.timer = 0.0
+		}
+
+		hot.x += f32(dive.direction) * dive.speed * delta_time
+		hot.y += dive.speed * delta_time
+
+		// keep the zigzag on screen so it stays visible until it dives past the bottom
+		if hot.x < 0 {
+			hot.x = 0
+			dive.direction = 1
+		} else if hot.x > f32(SCREEN_WIDTH) - f32(hot.width) {
+			hot.x = f32(SCREEN_WIDTH) - f32(hot.width)
+			dive.direction = -1
+		}
+
+		hot.angle = f32(dive.direction) * 45.0
+
+		if hot.y > SCREEN_HEIGHT {
+			cold.bacteria_state = .Returning
+			cold.dive_initialized = false
+			cold.return_initialized = false
+			cold.return_start_points = {hot.x, 0 - f32(hot.height)}
+			cold.t = 0.0
+		}
 	case Sweep_Dive:
+		// fixed-duration placeholder; wiring cold.speed here is Phase 6 tuning
+		dive.t += delta_time / 2.0
+		if dive.t > 1.0 do dive.t = 1.0
+
+		path := EntryPathData{}
+		path.control_points[0] = dive.control_points[0]
+		path.control_points[1] = dive.control_points[1]
+		path.control_points[2] = dive.control_points[2]
+		path.control_points[3] = dive.control_points[3]
+
+		pos := bezier_calc(path, dive.t)
+		hot.x = pos.x
+		hot.y = pos.y
+		hot.angle = calculate_bezier_angle(path, dive.t)
+
+		if dive.t >= 1.0 {
+			cold.bacteria_state = .Returning
+			cold.dive_initialized = false
+			cold.return_initialized = false
+			cold.return_start_points = {hot.x, 0 - f32(hot.height)}
+			cold.t = 0.0
+		}
 	}
 }
 
@@ -742,18 +795,18 @@ buff_fraction_permille :: proc(level: int, rng: runtime.Random_Generator) -> int
 	return rand.int_range(lo, hi + 1, rng)
 }
 
-buff_total :: proc(cold: ^BacteriaCold, catergory: BuffCategory) -> int {
-	def := BUFF_DEFS[catergory]
+buff_total :: proc(cold: ^BacteriaCold, category: BuffCategory) -> int {
+	def := BUFF_DEFS[category]
 	total := 0
 	present := false
 
 	for i in 0 ..< cold.buff_count {
 		slot := cold.buffs[i]
-		if slot.category != catergory do continue
+		if slot.category != category do continue
 		present := true
 		total += def.max_magnitude * slot.fraction / 1000
 	}
 	if total > def.max_magnitude do total = def.max_magnitude
-	if catergory == .Biofilm && present && total < 1 do total = 1
+	if category == .Biofilm && present && total < 1 do total = 1
 	return total
 }

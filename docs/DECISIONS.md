@@ -435,10 +435,10 @@ actually behave.
 - **No species promotion, ever.** An earlier decision to promote fleeing
   bacteria only to already-unlocked species is superseded and no longer applies.
   There is no promotion to gate.
-- `species_unlocked` (`src/procedural.odin:125`, computed but never read) is
-  still to be wired, but for **spawn variety**, not promotion.
-  `bacteria_spawn` currently hardcodes `.Strep` (`src/level.odin:178`), so the
-  game is one species throughout.
+- `species_unlocked` is wired into spawn variety (1.4 substep C), not promotion.
+  Fresh spawns draw a species from `derive_seed(wave.seed, .Wave, 1 +
+  wave.spawn_index)` against `min(species_unlocked, len(BACTERIA_DEFS))`;
+  returners keep their stored species. Level 1 therefore draws Strep only.
 
 ## Return scope
 
@@ -741,7 +741,8 @@ simplicity and for greater variance in resulting stacks.
   slot; nothing needs undoing.
 - **Phase 1.3 owns the scaffolding.** It adds the category enum, the five-slot
   array, `BUFF_DEFS`, and the seeded roll because the flee response needs them.
-  Phase 1.4 applies the four effects and wires `species_unlocked` into spawning.
+  Phase 1.4 applies the four effects and wires `species_unlocked` into spawning
+  (both landed).
 - **Each escape is a compounding gain**: a buff plus a free full-health restore,
   while the rest of the wave stays at spawn baseline. Failure makes the game
   harder, which is thematically intended. The array never grows past five; a sixth
@@ -761,9 +762,9 @@ simplicity and for greater variance in resulting stacks.
   derived from `BACTERIA_DEFS` — is superseded. A percentage is an explicit
   design multiplier, not a silent rescaling driven by later base-stat changes.
 - Buffs need a visual tell, or the player cannot learn to prioritize. Species color
-  already carries identity (`r/g/b` per species, with Staph, Ecoli, and
-  Pseudomonas all 50x50 in distinct colors), so the buff visual needs its own
-  channel rather than competing for color.
+  already carries identity (`r/g/b` per species, all four 16x16 with distinct
+  colors), so the buff visual needs its own channel rather than competing for
+  color.
 
 ### Open questions (not yet decided)
 

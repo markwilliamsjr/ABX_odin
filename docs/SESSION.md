@@ -2,6 +2,7 @@
 
 ## Date
 
+2026-11-23 (1.4 implemented; species dives are placeholders)
 2026-11-21 (1.4 decisions settled and docs updated; implementation not started)
 2026-11-19 (1.3 steps one–six plus the return spawn path, verified; 1.2
 complete 2026-11-05; earlier work 2026-11-01 and 2026-10-31)
@@ -316,26 +317,52 @@ roadmap, architecture, and current-state docs updated to match.
 - Discrepancy found: `PROJECT.md` claimed weapon selection was implemented.
   `current_ammo` is never written after `player_init`; corrected.
 
+## 1.4 implementation (2026-11-23)
+
+- **A. Weapon weakness removed.** `WeaponDefinition` collapsed to a single
+  `damage`; `BacteriaDefinition.weakness` and `calculate_bullet_damage` deleted.
+  Neutral, PCN, and PMX are all `damage = 3` placeholders; Phase 7 tunes them.
+- **B. Buff effects.** `BuffInstance` carries category and rolled fraction;
+  stored on `BacteriaCold`, spawn params, and roster entries. `BUFF_DEFS` holds
+  per-category ceilings and `BUFF_FRACTION_BANDS` holds the 5-level permille
+  bands. `buff_total` converts each matching slot and caps the sum at the
+  ceiling, with the Biofilm floor applied only when a Biofilm slot exists.
+  Hardy and Frenzied are applied in `bacteria_init` (health restore moved below
+  them); Resistant and Biofilm are applied by `bacteria_dmg_after_buffs` at the
+  damage site in `game.odin`. `biofilm_hits` is reset on spawn.
+- **Flee roll.** `wave_flee_begin` draws the category then the fraction from the
+  per-slot RNG, stores both, and logs the fraction.
+- **C. Species variety.** Fresh spawns draw from
+  `derive_seed(wave.seed, .Wave, 1 + spawn_index)` against
+  `min(species_unlocked, len(BACTERIA_DEFS))`; returners keep their stored
+  species. `wave_init` now stores `species_unlocked` (it had been computed but
+  never assigned, so the draw started at `int_range(0, 0)` and asserted).
+- **All-species placeholder motion.** Entry and return bezier movement are
+  duplicated per species, and `entry_path_length` is set for all four in
+  `bacteria_init` and `bacteria_return_init`. E. coli's `Zigzag_Dive` advances a
+  timer, flips direction on cooldown, moves horizontally and downward, and
+  bounces off the screen edges. Pseudomonas's `Sweep_Dive` copies its four
+  control points into a temporary `EntryPathData` and reuses `bezier_calc` over a
+  fixed two-second placeholder duration. Every dive type now sets
+  `return_start_points`, `t = 0`, `dive_initialized = false`, and
+  `return_initialized = false` when it enters `.Returning`.
+- `return_initialized` reset is load-bearing for repeated dives: without it the
+  second return reused the first return's path. This was latent for Strep.
+- The duplicated non-Strep blocks and the hardcoded dive speeds are deliberate
+  placeholders for Phase 6; Frenzied still reaches only Strep motion.
+
 ## Current code state
 
-`odin check src` is clean. Roadmap 1.2 is implemented end to end: ownership,
-counters, spawn termination, crossing, completion, advancement, and `level_end`.
-All 1.3 mechanics are in place: buff scaffolding, the `.Buff` seed with
-`Wave.seed`, the return roster, `flee_prohibited`, the effective threshold, the
-zero-duration flee phase, the seeded buff roll, the delay tick, and the return
-spawn path. Due roster entries now lead each wave's spawns with species, buffs,
-and restored health preserved; overflow stays queued and the cap drops the
-oldest. The return, roster push/drop, and flee-prohibited logs are in place.
-No buff effect is applied yet: Hardy, Resistant, Biofilm, and Frenzied are
-stored but inert until 1.4.
-`level_end` is written but unread until `.Level_Transition` lands in 1.5.
+`odin check src` is clean. Roadmap 1.2 and 1.3 are implemented end to end.
+Roadmap 1.4 is implemented: weakness removed, all four buff effects live,
+species drawn from the seeded pool, and all four species enter, dive, and
+return. The non-Strep entry/hold/dive/return blocks and the hardcoded dive
+speeds are placeholders for Phase 6. `level_end` is written but unread until
+`.Level_Transition` lands in 1.5.
 
-Runtime verification: 1.3 flee and return was exercised headlessly with a
-temporary forced crossing — return order, buff compounding, health restore,
-overflow, roster cap, flee-prohibited, and same-seed replay all passed. The 1.2
-crossing checks were reported passing — boundary, set-once, shortfall
-denominator, and the zero-spawn guard. The resolution and advancement checks
-are not recorded as standalone runs, though the 1.3 logs show both firing.
+Runtime verification: the 1.3 flee/return checks were exercised headlessly with
+a temporary forced crossing, including same-seed replay. The 1.4 species and
+buff effects have not been recorded as standalone runtime runs yet.
 
 Two issues recorded in earlier sessions are fixed in the current source: the
 wave guard uses `<` and `wave_dive_update` is guarded, and the overlay reads
@@ -343,32 +370,32 @@ wave guard uses `<` and `wave_dive_update` is guarded, and the overlay reads
 
 ## Current task
 
-Roadmap 1.4 is planned and documented but not implemented. 1.3 and 1.2 are
-complete. The 1.4 decisions are recorded in `DECISIONS.md`; no source file has
-changed for 1.4 yet. Implementation steps are in
-`/home/pndarn/.opencode/plan/1.4-resistance-buffs.md`.
+Roadmap 1.4 is implemented in source and `odin check src` is clean. Remaining
+work is to verify 1.4 at runtime: species per level, dives and returns, buff
+effects, and same-seed replay.
 
 ## Next step
 
-Substep A: remove weapon weakness — collapse `WeaponDefinition` to one damage
-value, delete `BacteriaDefinition.weakness` and `calculate_bullet_damage`, and
-drop the unused `bacteria_def` local in `collision_update`. Then substep B applies
-the four buff effects, and substep C wires `species_unlocked` into spawning.
-
+Run the 1.4 verification checks below, then start 1.5 (`Level_Transition`).
 `Level.end_chance` still needs confirming and removing before 1.5.
 
 ## Open issues
 
-- `BUFF_DEFS` magnitudes are `1` placeholders. 1.4 replaces them with per-category
-  ceilings plus the block fraction bands; exact values remain tuning.
-- Weapon weakness is still in the code; removal is the first 1.4 substep.
+- `BUFF_DEFS` ceilings and `BUFF_FRACTION_BANDS` are first-pass tuning values,
+  not architecture.
+- Weapon damage is a flat `3` for Neutral, PCN, and PMX; differentiation is
+  Phase 7 work.
 - No weapon switching control exists; `current_ammo` is set once in `player_init`.
 - Remaining `odin check src -vet` errors are deferred to roadmap gate 1.8 at
   the end of Phase 1: `ttf` in `debug.odin`, two unused `bacteria_def` locals in
   `enemy.odin`, and `divers_count`/`potental_divers` in `procedural.odin`.
 - `BuffCategory`'s zero value is `Hardy`, so unused buff slots past `buff_count`
   read as Hardy. Any consumer must loop to `buff_count`.
-- Flee-rolled buffs are stored but never applied.
+- Frenzied affects only Strep entry and dive motion; Staph, E. coli, and
+  Pseudomonas dive speeds are hardcoded placeholders (Phase 6).
+- Non-Strep entry/hold/dive/return behavior is duplicated placeholder code; each
+  copy repeats the wall-clock `state_start_time` read, widening the Phase 2
+  determinism fix.
 - The full-pool spawn-failure path in `wave_update` (no pop, no counter advance)
   is structurally correct but untested at runtime; it needs a temporary edit
   that fills all `MAX_ENEMIES` slots before a spawn tick.
@@ -379,8 +406,6 @@ the four buff effects, and substep C wires `species_unlocked` into spawning.
 - `Level.end_chance` is unread and superseded by the rolled flee threshold;
   `Level.level_end` is written but unread until 1.5.
 - `--no-vsync` is parsed but never read; the renderer always enables vsync.
-- `species_unlocked` is computed but never read; `bacteria_spawn` hardcodes
-  `.Strep`.
 - Decisions still read wall-clock time: `formation_complete_time`, the dive
   gate, `flee_start_time` (log only), and `delta_time`.
 - `wave_init` writes `region_enemy_count[i] = result.placed` for every region,
@@ -389,6 +414,24 @@ the four buff effects, and substep C wires `species_unlocked` into spawning.
 - `wave_init` assigns `spawn_region = 0` twice.
 
 ## Verification to record
+
+1.4 compile: `odin check src` is clean. Runtime checks still to record:
+
+- level 1: Strep only; level 6 adds Staph; level 11 adds E. coli; level 16 adds
+  Pseudomonas
+- every fresh spawn has a finite nonzero `entry_path_length` and reaches
+  `.Holding`; every species dives and returns without stale positions
+- E. coli zigzags and bounces off the screen edges; Pseudomonas sweeps along its
+  curve; both return from their dive exit point
+- Hardy raises `max_health`; five block-4 Hardy rolls give exactly `base * 6`
+- Frenzied raises Strep entry and dive speed
+- Resistant reduces damage and floors at 1; Biofilm absorbs exactly its rolled
+  hit count and resets on spawn/return
+- Biofilm with no buff absorbs nothing; an early low-fraction Biofilm still
+  absorbs one hit
+- a second dive in the same life returns along its own new path, not the first
+- same seed twice: identical species per slot, entry positions, buff fractions,
+  and dives
 
 1.3 seed and roster: compile clean. The temporary startup roster self-test passed
 under the dummy SDL video driver and was removed: empty pop, FIFO order, cap at
