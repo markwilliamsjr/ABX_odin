@@ -17,8 +17,8 @@ Decide each before writing the code that depends on it.
 - [X] **Does the flee threshold scale with buff count?** Resolved: scale by the
       wave's highest buff count, +50 permille per buff, clamped. See
       [[file:DECISIONS.md::Flee threshold scaling][Flee threshold scaling]].
-- [ ] **Frenzied stacking** — additive-with-cap or free multiplication? Blocks
-      buff tuning, not implementation.
+- [X] **Frenzied stacking** — Resolved: additive-with-cap per category. See
+      [[file:DECISIONS.md::Buff magnitude scaling][Buff magnitude scaling]].
 - [ ] **Boss shape, roster entry, meter interaction** — deferred with Phase 8,
       but decide before tuning difficulty.
 - [ ] **Settings precedence and runtime vsync fallback** — blocks Phase 5.
@@ -101,14 +101,31 @@ Full detail: [[file:DECISIONS.md::Return queue mechanics][Return queue mechanics
 
 *** 1.4 Resistance buff effects
 
-- [ ] Apply ~Hardy~: raise max health from ~BUFF_DEFS~.
-- [ ] Apply ~Resistant~: reduce damage taken; resolve its interaction with weapon
-      weakness before tuning.
-- [ ] Apply ~Biofilm~: absorb the first N hits.
-- [ ] Apply ~Frenzied~: raise speed; keep the stacking question open until
-      tuning.
-- [ ] Wire ~species_unlocked~ into spawning so ~bacteria_spawn~ stops hardcoding
-      ~.Strep~.
+Decisions settled in [[file:DECISIONS.md::Buff magnitude scaling][Buff magnitude
+scaling]] and [[file:DECISIONS.md::Weapon weakness removed][Weapon weakness
+removed]]. Three substeps, in order.
+
+**** A. Remove weapon weakness
+
+- [x] Collapse ~WeaponDefinition~ to one ~damage~ value; delete
+      ~BacteriaDefinition.weakness~ and the ~calculate_bullet_damage~ tier branch.
+- [x] Remove the unused ~bacteria_def~ local in ~collision_update~.
+- [x] Keep ~WeaponType~ as identity; no switching control in this phase.
+
+**** B. Apply buff effects
+
+- [ ] Add ~BuffInstance~ with category + rolled fraction; store it on the cold
+      pool, spawn params, and roster entries.
+- [ ] Add the block fraction table, the seeded fraction draw, and the per-category
+      total cap helper.
+- [ ] Apply ~Hardy~ and ~Frenzied~ in ~bacteria_init~; ~Resistant~ and ~Biofilm~ at
+      the damage site.
+- [ ] Thread ~level_number~ into the flee roll; log the fraction.
+
+**** C. Wire species variety
+
+- [ ] Pick fresh-spawn species from ~Wave.species_unlocked~ with a seeded draw;
+      stop hardcoding ~.Strep~.
 
 *** 1.5 Level transition
 
@@ -239,6 +256,11 @@ Separate species identity from reusable gameplay behaviors.
 ** Phase 7 — Skill tree
 
 - [ ] Node graph, persistence across levels, UI, stat application.
+- [ ] Unlock weapons (PCN, PMX) through the tree; add the weapon-switching
+      control. Player starts with Neutral only.
+- [ ] Grant active abilities and passive stat nodes.
+- [ ] Tune weapon damage versus fire rate; PCN and PMX are placeholders until
+      then.
 - [ ] Mount into the existing ~Level_Transition~ state.
 - [ ] Do not start until advancement, procgen, and formation generation are
       solid.

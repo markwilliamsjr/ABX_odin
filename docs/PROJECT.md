@@ -27,8 +27,10 @@ contradiction.
 
 Implemented:
 
-- **Player.** Movement, weapon selection, firing, bullets, and bullet/bacteria
-  collision.
+- **Player.** Movement, firing, bullets, and bullet/bacteria collision. Only
+  Neutral ammo exists in code: `current_ammo` is set at init and never changed;
+  there is no switching control. Weapon weakness currently branches damage into
+  effective / neutral / ineffective tiers; its removal is 1.4 substep A.
 - **Bacteria.** Species definitions for Strep, Staph, E. coli, and Pseudomonas;
   a flat cold/hot SoA pool owned by the level; spawning, movement, diving, and
   rendering. Each bacterium stores its owning wave index, with `-1` meaning not
@@ -93,6 +95,7 @@ Not yet implemented:
 
 - Fleeing animation.
 - Resistance buff effects.
+- Weapon switching and unlocks (Phase 7).
 - Real `Level_Transition` logic.
 - Clay UI, settings, skill tree, bosses, and adaptive wave composition.
 - A working no-vsync path and frame limiter.

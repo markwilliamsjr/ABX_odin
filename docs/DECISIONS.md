@@ -744,21 +744,22 @@ simplicity and for greater variance in resulting stacks.
   Phase 1.4 applies the four effects and wires `species_unlocked` into spawning.
 - **Each escape is a compounding gain**: a buff plus a free full-health restore,
   while the rest of the wave stays at spawn baseline. Failure makes the game
-  harder, which is thematically intended, but growth is multiplicative rather than
-  additive. The array never grows past five; a sixth escape replaces the oldest.
-  Boss levels are the eventual hard clear, not the thing that enforces the slot
-  count.
+  harder, which is thematically intended. The array never grows past five; a sixth
+  escape replaces the oldest. Boss levels are the eventual hard clear, not the
+  thing that enforces the slot count. Growth is additive within a category and
+  bounded by that category's ceiling (see "Buff magnitude scaling").
 - **The specific runaway risk is Frenzied stacking.** A 5-stack Frenzied
   Pseudomonas at base speed 400, multiplied by a wave `speed_scalar` that already
   scales with level block (`src/procedural.odin:132`), could produce an
-  unplayable screen.
-- **`Resistant` interacts with the weapon weakness system.** Weapons deal 6 / 3 / 2
-  for effective / neutral / ineffective (`src/player.odin:42-66`). A Resistant
-  bacterium with the wrong weakness could become effectively unkillable.
-- **Base stats are not final**, so buff magnitudes must not be tuned yet. They are
-  to be stored as absolute values in a separate `BUFF_DEFS` table, deliberately
-  **not** derived from `BACTERIA_DEFS` — otherwise changing a bacterium's base
-  health silently rescales every buff.
+  unplayable screen. The additive-with-cap rule bounds this; the ceiling is still
+  a tuning value.
+- **`Resistant` has no weapon-weakness interaction.** Weapon weakness was removed
+  (see "Weapon weakness removed"); damage is one number per weapon. Resistant
+  reduces that number with a floor that keeps the bacterium killable.
+- **Magnitudes are percentages, not absolute values**, per "Buff magnitude
+  scaling". The earlier rule — absolute values in `BUFF_DEFS`, deliberately not
+  derived from `BACTERIA_DEFS` — is superseded. A percentage is an explicit
+  design multiplier, not a silent rescaling driven by later base-stat changes.
 - Buffs need a visual tell, or the player cannot learn to prioritize. Species color
   already carries identity (`r/g/b` per species, with Staph, Ecoli, and
   Pseudomonas all 50x50 in distinct colors), so the buff visual needs its own
@@ -766,10 +767,6 @@ simplicity and for greater variance in resulting stacks.
 
 ### Open questions (not yet decided)
 
-- **Should Frenzied be additive-with-cap rather than freely multiplicative?**
-  Blocks tuning.
-- **Does Resistant stack multiplicatively with weapon weakness?** Could make a
-  bacterium effectively immune.
 - **What visual channel do buffs use?** One outline per category is the current
   leaning, held loosely. Does not need resolving before the skill tree.
 
@@ -777,17 +774,20 @@ simplicity and for greater variance in resulting stacks.
 
 ### Decision
 
-Buffs are stored per instance as `[MAX_BUFFS]BuffCategory` plus a `buff_count`.
-The magnitude is looked up in `BUFF_DEFS`; it is not stored per slot. Slots stay
-in chronological order. When all five are filled, a new buff shifts slots 1–4
-down and is written at index 4, so index 0 is always the oldest.
+Buffs are stored per instance as `[MAX_BUFFS]BuffInstance` plus a `buff_count`.
+Each `BuffInstance` holds a `BuffCategory` and the rolled magnitude, stored as a
+permille fraction of that category's ceiling in `BUFF_DEFS`. Slots stay in
+chronological order. When all five are filled, a new buff shifts slots 1–4 down
+and is written at index 4, so index 0 is always the oldest.
 
 `max_health` lives on `BacteriaHot`, beside `health`.
 
 ### Reason
 
-Category-only storage avoids duplicating magnitudes that `BUFF_DEFS` already
-owns, and a single source for the magnitude keeps tuning in one place.
+The magnitude varies per escape — level scaling and the lucky/unlucky range make
+it instance data, not a table lookup. Storing it with the category keeps the
+append and shift atomic and makes a roster entry self-contained. `BUFF_DEFS`
+retains the per-category ceiling and unit, so tuning still has one anchor.
 Chronological order makes logs and any later display read naturally; with five
 slots the shift cost is irrelevant. `max_health` is combat state, so it belongs
 with `health` rather than with the buff list.
@@ -801,11 +801,119 @@ with `health` rather than with the buff list.
   reused slot. Any future spawn-params buffs must be applied after that clear.
 - `max_health` is base health in 1.3. The return path must compute the buffed
   value before restoring health, otherwise Hardy bacteria return at base health.
+- `BuffInstance` carries both category and magnitude. Restoring a roster entry
+  copies the whole array; `bacteria_buff_add` shifts whole instances, never
+  categories alone.
+- The total cap is applied at read time by `buff_total(cold, category)`, not at
+  roll time. A sixth escape still replaces the oldest slot; the cap only decides
+  how much of the new stack actually counts.
 - The `BuffCategory` ordinal is part of a seeded roll once the flee path indexes
   the enum. The order is frozen as `Hardy, Resistant, Biofilm, Frenzied`.
 - `Hardy` is ordinal zero, so unused slots past `buff_count` read as `Hardy`.
   Every consumer iterates to `buff_count` only; a full-array loop would silently
   apply Hardy buffs.
+
+## Weapon weakness removed
+
+### Decision
+
+Weapon weakness matching is removed. `WeaponDefinition` carries one `damage`
+value instead of effective / neutral / ineffective tiers, and
+`BacteriaDefinition.weakness` is deleted. `WeaponType` remains as identity — it
+indexes the weapon texture arrays, `Player.current_ammo`, `Bullets.weapon_type`,
+and `WEAPON_DEFS`.
+
+The player starts with Neutral. PCN and PMX are unlocked through the skill tree,
+which also grants active abilities and passive stat nodes. Until that tree exists,
+the player only ever fires Neutral; no switching control is added in Phase 1.
+
+Weapons will be differentiated by a damage-versus-fire-rate tradeoff: some faster
+and weaker, others slower and stronger. Current single damage values are
+placeholders; tuning belongs to Phase 7.
+
+### Reason
+
+The weakness system could not be made to work in play. Keeping a mechanic that
+does not function adds branching to the damage path without adding a decision the
+player can meaningfully make. Moving unlocks to the skill tree gives weapons
+progression without requiring every weapon to have a matching bacteria weakness.
+
+### Consequences
+
+- `calculate_bullet_damage` is deleted; the collision path applies a single
+  weapon damage value, then resistance buffs.
+- The `bacteria_def` local in `collision_update` becomes unused and must be
+  removed with the damage call, or it becomes a new vet finding.
+- PCN and PMX are stat-identical placeholders (different textures only) until
+  Phase 7 tunes their speed and damage tradeoff.
+- `PROJECT.md`'s claim that weapon selection was implemented was wrong: no key
+  changes `current_ammo`. Corrected to match the code.
+- Weapon progression is entirely owned by Phase 7. If that phase slips, there is
+  no weapon variety in the meantime.
+- Resistant no longer has a weakness interaction to resolve; that open question
+  is closed.
+
+## Buff magnitude scaling
+
+### Decision
+
+Every buff roll produces a **normalized fraction** in permille of a per-category
+ceiling. `BUFF_DEFS` stores that ceiling (`max_magnitude`) in the category's own
+unit: Hardy in percent of base health, Resistant in permille damage reduction,
+Biofilm in hit count, Frenzied in percent of base speed.
+
+The fraction's range depends on the 5-level block from "Early-level determinism":
+
+| block | levels | fraction (permille of ceiling) | Hardy equivalent |
+|-------+--------+-------------------------------+------------------|
+|     0 |    1–5 |                         20–40 |         10–20%   |
+|     1 |   6–10 |                       100–200 |        50–100%   |
+|     2 |  11–15 |                       200–400 |       100–200%   |
+|     3 |  16–20 |                       300–600 |       150–300%   |
+|    4+ |   21+  |                      500–1000 |       250–500%   |
+
+The table is a starting proposal, not balance. Tuning changes the numbers, not
+the mechanism.
+
+The total magnitude for a category across all of a bacterium's slots is clamped
+to that category's ceiling. Stacking is additive-with-cap, never free
+multiplication. Biofilm floors at one hit so an early roll is meaningful.
+
+Both the category and the fraction are rolled at flee begin from the existing
+per-slot RNG (`derive_seed(wave.seed, .Buff, slot_index)`), category first, then
+fraction. The draw order is part of the seeded contract.
+
+### Reason
+
+The design goal is that early escapes are a small bonus and late escapes can be
+enormous, with a seeded lucky/unlucky spread inside each band. A single normalized
+curve gives every category the same shape while keeping its own unit, so tuning
+lives in one table plus one band table.
+
+Additive-with-cap answers the Frenzied stacking question and bounds the
+`speed_scalar` compounding. A per-category cap is the only coherent reading:
+health percent, damage permille, hit count, and speed percent cannot share one
+number.
+
+The earlier absolute-value rule is superseded. Its reason was to avoid silent
+rescaling when base stats change; a percentage is a deliberate multiplier, and
+level scaling requires a per-roll value that cannot be a static table entry.
+
+### Consequences
+
+- `BuffDefinition.magnitude` becomes `max_magnitude`; `BuffInstance` stores the
+  rolled fraction, so the effective magnitude is computed at the application
+  site.
+- The cap is enforced at read time in one helper used by all four effect sites;
+  a sixth escape still replaces the oldest slot, the cap only decides how much
+  counts.
+- Hardy and Frenzied apply in `bacteria_init`; Resistant and Biofilm apply at the
+  damage site. `max_health` must be computed before health is restored.
+- The category remains the first draw from the per-slot RNG, so existing category
+  rolls are unchanged; the fraction is a new second draw.
+- The flee threshold's `+50 * max_buff_count` is a separate mechanism and stays
+  flat and count-based. Scaling both at once would make tuning uninterpretable.
+- Level 1–5 buffs stay small by construction, matching early-level determinism.
 
 ## Bacteria identity and behavior
 

@@ -223,7 +223,6 @@ collision_update :: proc(bullet: ^Bullets, level: ^Level) {
 		for j in 0 ..< MAX_ENEMIES {
 			hot := &bacteria.hot[j]
 			cold := &bacteria.cold[j]
-			bacteria_def := get_bacteria_def(hot.species)
 			weapon_def := get_weapon_def(bullet.weapon_type[i])
 			if !hot.active do continue
 			collision := check_collision(
@@ -235,7 +234,7 @@ collision_update :: proc(bullet: ^Bullets, level: ^Level) {
 				bullet.height[i],
 			)
 			if collision {
-				hot.health -= calculate_bullet_damage(weapon_def^, bacteria_def^)
+				hot.health -= weapon_def.damage
 				if hot.health <= 0 {
 					owner := cold.wave_index
 					hot.active = false
@@ -388,19 +387,6 @@ check_collision :: proc(
 		return false
 	}
 	return true
-}
-
-calculate_bullet_damage :: proc(
-	weapon_def: WeaponDefinition,
-	bacteria_def: BacteriaDefinition,
-) -> int {
-	if weapon_def.weapon_type == .Neutral {
-		return weapon_def.damage_neutral
-	}
-	if weapon_def.weapon_type == bacteria_def.weakness {
-		return weapon_def.damage_effective
-	}
-	return weapon_def.damage_ineffective
 }
 
 // ---- Render ----

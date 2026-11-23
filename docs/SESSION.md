@@ -2,6 +2,7 @@
 
 ## Date
 
+2026-11-21 (1.4 decisions settled and docs updated; implementation not started)
 2026-11-19 (1.3 steps one–six plus the return spawn path, verified; 1.2
 complete 2026-11-05; earlier work 2026-11-01 and 2026-10-31)
 
@@ -285,6 +286,36 @@ Review notes not yet acted on:
 - `flee prohibited` is emitted at init, not at crossing, so it prints per wave
   whether or not the wave actually flees.
 
+## 1.4 decisions (2026-11-21)
+
+No source changed in this pass; decisions recorded in `DECISIONS.md` and the
+roadmap, architecture, and current-state docs updated to match.
+
+- Weapon weakness is removed. One `damage` value per weapon;
+  `BacteriaDefinition.weakness` and `calculate_bullet_damage` are deleted.
+  `WeaponType` stays as identity. Reason: the system could not be made to work;
+  progression moves to the skill tree.
+- The player starts with Neutral only. No switching control exists today, so none
+  is added in Phase 1; Phase 7 adds unlocks, switching, active abilities and
+  passive stat nodes. PCN and PMX remain stat-identical placeholders until then,
+  to be tuned along a damage-versus-fire-rate tradeoff.
+- Buff magnitude is a normalized permille fraction of a per-category ceiling in
+  `BUFF_DEFS`, stored per instance on the buff slot and roster entry. Reverses the
+  earlier category-only, absolute-magnitude rule; the reason is that level scaling
+  and a lucky/unlucky range make magnitude instance data.
+- Total magnitude per category is capped at its ceiling: additive-with-cap,
+  resolving the Frenzied stacking question. Per-category because the units differ
+  (health %, damage permille, hit count, speed %).
+- Fraction bands reuse the 5-level blocks. Proposed starting bands in permille of
+  ceiling: `[20,40]`, `[100,200]`, `[200,400]`, `[300,600]`, `[500,1000]` for
+  blocks 0–4+. Numbers are tuning, not architecture.
+- The category stays the first draw from the per-slot RNG; the fraction is a new
+  second draw. The flee threshold's `+50 * max_buff_count` is out of scope.
+- `species_unlocked` wiring is a separate third substep, after weakness removal
+  and buff effects.
+- Discrepancy found: `PROJECT.md` claimed weapon selection was implemented.
+  `current_ammo` is never written after `player_init`; corrected.
+
 ## Current code state
 
 `odin check src` is clean. Roadmap 1.2 is implemented end to end: ownership,
@@ -312,23 +343,26 @@ wave guard uses `<` and `wave_dive_update` is guarded, and the overlay reads
 
 ## Current task
 
-Roadmap 1.3, fleeing and returning, is complete: mechanics, return path, and
-logs are all implemented and verified. 1.2 is complete; 1.4 is next. 1.6
-verification stays outstanding behind 1.5.
+Roadmap 1.4 is planned and documented but not implemented. 1.3 and 1.2 are
+complete. The 1.4 decisions are recorded in `DECISIONS.md`; no source file has
+changed for 1.4 yet. Implementation steps are in
+`/home/pndarn/.opencode/plan/1.4-resistance-buffs.md`.
 
 ## Next step
 
-Start 1.4, resistance buff effects: apply Hardy, Resistant, Biofilm, and
-Frenzied from `BUFF_DEFS`, and wire `species_unlocked` into spawning so
-`bacteria_spawn` stops hardcoding `.Strep`. Two open questions from
-`DECISIONS.md` block tuning, not implementation: Frenzied stacking, and
-Resistant's interaction with weapon weakness.
+Substep A: remove weapon weakness — collapse `WeaponDefinition` to one damage
+value, delete `BacteriaDefinition.weakness` and `calculate_bullet_damage`, and
+drop the unused `bacteria_def` local in `collision_update`. Then substep B applies
+the four buff effects, and substep C wires `species_unlocked` into spawning.
 
 `Level.end_chance` still needs confirming and removing before 1.5.
 
 ## Open issues
 
-- `BUFF_DEFS` magnitudes are `1` placeholders; 1.4 owns tuning.
+- `BUFF_DEFS` magnitudes are `1` placeholders. 1.4 replaces them with per-category
+  ceilings plus the block fraction bands; exact values remain tuning.
+- Weapon weakness is still in the code; removal is the first 1.4 substep.
+- No weapon switching control exists; `current_ammo` is set once in `player_init`.
 - Remaining `odin check src -vet` errors are deferred to roadmap gate 1.8 at
   the end of Phase 1: `ttf` in `debug.odin`, two unused `bacteria_def` locals in
   `enemy.odin`, and `divers_count`/`potental_divers` in `procedural.odin`.

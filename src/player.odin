@@ -18,11 +18,11 @@ WeaponType :: enum {
 }
 
 WeaponDefinition :: struct {
-	weapon_type:                                                         WeaponType,
-	bullet_texture_path:                                                 string,
-	ship_texture_path:                                                   string,
-	damage_effective, damage_neutral, damage_ineffective, width, height: int,
-	speed:                                                               f32,
+	weapon_type:           WeaponType,
+	bullet_texture_path:   string,
+	ship_texture_path:     string,
+	damage, width, height: int,
+	speed:                 f32,
 }
 
 Bullets :: struct {
@@ -39,9 +39,7 @@ WEAPON_DEFS := [WeaponType]WeaponDefinition {
 		weapon_type = .Neutral,
 		bullet_texture_path = "assets/weapons/base_shot.png",
 		ship_texture_path = "assets/ships/ship_neutral.png",
-		damage_effective = 3,
-		damage_neutral = 3,
-		damage_ineffective = 3,
+		damage = 3,
 		width = 8,
 		height = 23,
 		speed = 300.0,
@@ -50,9 +48,7 @@ WEAPON_DEFS := [WeaponType]WeaponDefinition {
 		weapon_type = .PCN,
 		bullet_texture_path = "assets/weapons/pcn_shot.png",
 		ship_texture_path = "assets/ships/ship_pcn.png",
-		damage_effective = 6,
-		damage_neutral = 3,
-		damage_ineffective = 2,
+		damage = 3,
 		width = 8,
 		height = 8,
 		speed = 300.0,
@@ -61,9 +57,7 @@ WEAPON_DEFS := [WeaponType]WeaponDefinition {
 		weapon_type = .PMX,
 		bullet_texture_path = "assets/weapons/pmx_shot.png",
 		ship_texture_path = "assets/ships/ship_pmx.png",
-		damage_effective = 6,
-		damage_neutral = 3,
-		damage_ineffective = 2,
+		damage = 3,
 		width = 8,
 		height = 8,
 		speed = 300.0,

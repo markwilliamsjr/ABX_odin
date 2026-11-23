@@ -94,13 +94,12 @@ BacteriaSpawnParams :: struct {
 	formation_position: sdl.FPoint,
 	species:            BacteriaSpecies,
 	wave_index:         int,
-	buffs:              [MAX_BUFFS]BuffCategory,
+	buffs:              [MAX_BUFFS]BuffInstance,
 	buff_count:         int,
 }
 
 BacteriaDefinition :: struct {
 	species:             BacteriaSpecies,
-	weakness:            WeaponType,
 	r, g, b:             u8,
 	health, base_speed:  int,
 	width, height:       int,
@@ -124,7 +123,7 @@ BacteriaCold :: struct {
 	bacteria_state:                                    BacteriaState,
 	entry_path:                                        EntryPathData,
 	dive_type:                                         DiveType,
-	buffs:                                             [MAX_BUFFS]BuffCategory,
+	buffs:                                             [MAX_BUFFS]BuffInstance,
 	entry_path_length:                                 f32,
 	current_segment, buff_count:                       int,
 	pause_timer:                                       f32,
@@ -137,7 +136,7 @@ BacteriaCold :: struct {
 
 PendingBacteria :: struct {
 	species:            BacteriaSpecies,
-	buffs:              [MAX_BUFFS]BuffCategory,
+	buffs:              [MAX_BUFFS]BuffInstance,
 	buff_count:         int,
 	waves_until_return: int,
 }
@@ -147,11 +146,16 @@ ReturnRoster :: struct {
 }
 
 BuffDefinition :: struct {
-	magnitude: int,
-	// Hardy: Health Points
+	max_magnitude: int,
+	// Hardy: Percent Health
 	// Resistant: Permille damage reduction
 	// Biofilm: Hit Count
-	// Frenzied: Speed
+	// Frenzied: Percent Base Speed
+}
+
+BuffInstance :: struct {
+	category: BuffCategory,
+	fraction: int,
 }
 
 
@@ -160,7 +164,6 @@ BuffDefinition :: struct {
 BACTERIA_DEFS := [BacteriaSpecies]BacteriaDefinition {
 	.Strep = {
 		species = .Strep,
-		weakness = .PCN,
 		r = 0,
 		g = 200,
 		b = 0,
@@ -178,7 +181,6 @@ BACTERIA_DEFS := [BacteriaSpecies]BacteriaDefinition {
 	},
 	.Staph = {
 		species = .Staph,
-		weakness = .PCN,
 		r = 150,
 		g = 200,
 		b = 0,
@@ -196,7 +198,6 @@ BACTERIA_DEFS := [BacteriaSpecies]BacteriaDefinition {
 	},
 	.Ecoli = {
 		species = .Ecoli,
-		weakness = .PMX,
 		r = 0,
 		g = 100,
 		b = 200,
@@ -214,7 +215,6 @@ BACTERIA_DEFS := [BacteriaSpecies]BacteriaDefinition {
 	},
 	.Pseudomonas = {
 		species = .Pseudomonas,
-		weakness = .PMX,
 		r = 0,
 		g = 200,
 		b = 200,
@@ -233,10 +233,10 @@ BACTERIA_DEFS := [BacteriaSpecies]BacteriaDefinition {
 }
 
 BUFF_DEFS := [BuffCategory]BuffDefinition {
-	.Hardy = {magnitude = 1},
-	.Frenzied = {magnitude = 1},
-	.Resistant = {magnitude = 1},
-	.Biofilm = {magnitude = 1},
+	.Hardy = {max_magnitude = 500},
+	.Frenzied = {max_magnitude = 300},
+	.Resistant = {max_magnitude = 800},
+	.Biofilm = {max_magnitude = 10},
 }
 // ---- Init ----
 bacteria_init :: proc(hot: ^BacteriaHot, cold: ^BacteriaCold, spawn_params: ^BacteriaSpawnParams) {
@@ -552,15 +552,15 @@ bacteria_animate :: proc(hot: ^BacteriaHot, def: ^BacteriaDefinition, delta_time
 	}
 }
 
-bacteria_buff_add :: proc(cold: ^BacteriaCold, category: BuffCategory) {
+bacteria_buff_add :: proc(cold: ^BacteriaCold, instance: BuffInstance) {
 	if cold.buff_count < MAX_BUFFS {
-		cold.buffs[cold.buff_count] = category
+		cold.buffs[cold.buff_count] = instance
 		cold.buff_count += 1
 	} else {
 		for i in 1 ..< MAX_BUFFS {
 			cold.buffs[i - 1] = cold.buffs[i]
 		}
-		cold.buffs[MAX_BUFFS - 1] = category
+		cold.buffs[MAX_BUFFS - 1] = instance
 	}
 }
 

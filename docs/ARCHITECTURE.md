@@ -10,7 +10,10 @@ Rationale for settled decisions lives in `DECISIONS.md`.
 
 Bacteria spawn in procedurally generated formations. After each level the player
 levels up and is presented with a Path of Exile like skill tree to upgrade their
-antibiotic.
+antibiotic. The tree unlocks weapons (the player starts with Neutral only) and
+grants both active abilities and passive stat nodes. Weapons are strong on their
+own — there is no weapon-versus-bacteria weakness system — and are differentiated
+by a damage-versus-fire-rate tradeoff.
 
 As the player moves through levels, different types of bacteria become able to
 spawn.
@@ -131,6 +134,11 @@ Each escape grants one category and restores the bacterium to spawn max health.
 Because escapes compound, a bacterium can be fled on repeatedly and stack
 resistance, up to five slots. The roll happens at the escape and is stored with
 the pending bacterium. A sixth escape replaces the oldest buff.
+
+Each category has a ceiling in `BUFF_DEFS`; the total across a bacterium's slots
+is capped at that ceiling. The rolled magnitude is a normalized fraction of the
+ceiling scaled by level block, so early escapes are small and late escapes can
+reach the cap. See `DECISIONS.md`'s "Buff magnitude scaling".
 
 ### The return queue
 
