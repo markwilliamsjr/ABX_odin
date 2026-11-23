@@ -55,7 +55,6 @@ Level :: struct {
 	bacteria:                             Bacteria,
 	wave_count, level_number, wave_index: int,
 	level_end, flee_prohibited:           bool,
-	end_chance:                           f32,
 }
 
 // ---- Init ----

@@ -2,6 +2,7 @@
 
 ## Date
 
+2026-11-23 (1.5 implemented and archived; docs updated)
 2026-11-23 (1.4 implemented; species dives are placeholders)
 2026-11-21 (1.4 decisions settled and docs updated; implementation not started)
 2026-11-19 (1.3 steps one–six plus the return spawn path, verified; 1.2
@@ -243,7 +244,7 @@ Review notes not yet acted on:
 - Update order is load-bearing: `wave_flee_update` must stay before
   `wave_resolution_update`, or an entry misses its tick and returns a wave late.
 - The tick also runs for the last wave before `level_end`, so a last-wave escape
-  is due for the next level's first wave once 1.5 lands.
+  is due for the next level's first wave in 1.5.
 - No entry is ever observed at delay one between frames; delays above one are
   only reachable through a temporary test edit.
 
@@ -351,18 +352,46 @@ roadmap, architecture, and current-state docs updated to match.
 - The duplicated non-Strep blocks and the hardcoded dive speeds are deliberate
   placeholders for Phase 6; Frenzied still reaches only Strep motion.
 
+## 1.5 implementation (2026-11-23)
+
+- **Transition state.** `World.transition` holds a `LevelTransition`
+  accumulator (`elapsed`, `duration`). `LEVEL_TRANSITION_TIME` is a temporary
+  five-second hold, marked TEMP until the skill tree.
+- **Entry.** In `.Playing`, after the wave block, `Level.level_end` switches the
+  state to `.Level_Transition`, resets `elapsed`, and logs
+  `transition start`. The check is now outside the `wave_index < wave_count`
+  guard, so it no longer depends on the final resolution happening inside it.
+- **Exit.** The transition branch owns the only later `level_init` call: it
+  passes `master_seed` and `level_number + 1`, clears bullets, logs
+  `transition end next=`, and returns to `.Playing`. The completed level number
+  is captured before `level_init` so the log keeps both values.
+- **Reset policy.** The player keeps its position; the return roster is on
+  `World` and survives. `level_init` resets `level_end` and the bacteria pool.
+- **Render.** `render_level_transition` runs after `render_world`, so the world
+  frame is frozen rather than cleared. A blended black overlay ramps to alpha
+  220 over the first 10% of the hold; `Level N Cleared` and
+  `Wait for next level` are drawn on top. The additive-with-blend text
+  allocation from `fmt.ctprintfln` / `fmt.caprintfln` is a temporary leak,
+  accepted until the skill tree replaces the transition UI.
+- **Removed.** `Level.end_chance`.
+- The plan is archived at `docs/plans/archive/1.5-level-transition.md` with an
+  Outcome; runtime checks are listed in "Verification to record".
+
 ## Current code state
 
 `odin check src` is clean. Roadmap 1.2 and 1.3 are implemented end to end.
 Roadmap 1.4 is implemented: weakness removed, all four buff effects live,
 species drawn from the seeded pool, and all four species enter, dive, and
 return. The non-Strep entry/hold/dive/return blocks and the hardcoded dive
-speeds are placeholders for Phase 6. `level_end` is written but unread until
-`.Level_Transition` lands in 1.5.
+speeds are placeholders for Phase 6. Roadmap 1.5 is implemented:
+`Level_Transition` is a real state that holds the frame, dims the world, shows
+the level number, and calls `level_init` for `level_number + 1`.
+`Level.end_chance` is gone.
 
 Runtime verification: the 1.3 flee/return checks were exercised headlessly with
 a temporary forced crossing, including same-seed replay. The 1.4 species and
-buff effects have not been recorded as standalone runtime runs yet.
+buff effects, and the 1.5 transition, have not been recorded as standalone
+runtime runs yet.
 
 Two issues recorded in earlier sessions are fixed in the current source: the
 wave guard uses `<` and `wave_dive_update` is guarded, and the overlay reads
@@ -370,14 +399,17 @@ wave guard uses `<` and `wave_dive_update` is guarded, and the overlay reads
 
 ## Current task
 
-Roadmap 1.4 is implemented in source and `odin check src` is clean. Remaining
-work is to verify 1.4 at runtime: species per level, dives and returns, buff
-effects, and same-seed replay.
+Roadmap 1.4 and 1.5 are implemented in source and `odin check src` is clean.
+Their runtime verification is outstanding. The 1.5 plan is archived at
+`docs/plans/archive/1.5-level-transition.md`; step plans live under
+`docs/plans/` and completed plans move to `docs/plans/archive/`.
 
 ## Next step
 
-Run the 1.4 verification checks below, then start 1.5 (`Level_Transition`).
-`Level.end_chance` still needs confirming and removing before 1.5.
+Run the 1.4 and 1.5 verification checks below, then start roadmap 1.6. The
+transition checks are the higher priority because they are new this session:
+clear one level and confirm a single start/end pair, level+1 generation, frozen
+simulation during the hold, roster survival, and same-seed replay.
 
 ## Open issues
 
@@ -403,8 +435,11 @@ Run the 1.4 verification checks below, then start 1.5 (`Level_Transition`).
   phase kill cannot be observed and the counter rule is unverified.
 - `fled_count` settles at finish, which makes the resolution gate load-bearing;
   the gate has not been exercised with a deferred finish.
-- `Level.end_chance` is unread and superseded by the rolled flee threshold;
-  `Level.level_end` is written but unread until 1.5.
+- `LEVEL_TRANSITION_TIME` is a temporary five-second hold. The temp-allocator
+  leak in the transition text is accepted until the skill tree replaces the UI.
+- The transition dims and returns to full brightness at the swap; there is no
+  fade-in on the new level. A true crossfade would need a second accumulator in
+  `.Playing`.
 - `--no-vsync` is parsed but never read; the renderer always enables vsync.
 - Decisions still read wall-clock time: `formation_complete_time`, the dive
   gate, `flee_start_time` (log only), and `delta_time`.
@@ -414,6 +449,26 @@ Run the 1.4 verification checks below, then start 1.5 (`Level_Transition`).
 - `wave_init` assigns `spawn_region = 0` twice.
 
 ## Verification to record
+
+1.5 compile: `odin check src` is clean and `end_chance` has no readers. Runtime
+checks still to record:
+
+- clear level 1: exactly one `transition start` for level 1 and one
+  `transition end next=2`
+- level 2 starts with `wave_index == 0`, `level_end == false`, a fresh bacteria
+  pool, and its own wave count and seed
+- simulation is suspended during the hold: bacteria, bullets, and player do not
+  move, while the world frame stays visible under the overlay
+- the overlay ramps to its dim alpha over the first 10% of the hold and the
+  level text is drawn on top
+- a flee at the end of level 1 returns in level 2's first wave with species and
+  buffs intact, and bullets do not carry over
+- `--level 16` advances to 17 without re-reading the CLI
+- same seed twice: level 2 composition identical; changing the hold duration
+  does not change generation
+- `--debug` starts in `.Playing` and transitions normally
+- regression: wave resolution, flee, roster tick, and logging are unchanged
+  until the transition starts
 
 1.4 compile: `odin check src` is clean. Runtime checks still to record:
 

@@ -105,6 +105,9 @@ Decisions settled in [[file:DECISIONS.md::Buff magnitude scaling][Buff magnitude
 scaling]] and [[file:DECISIONS.md::Weapon weakness removed][Weapon weakness
 removed]]. Three substeps, in order.
 
+Plan: [[file:plans/archive/1.4-resistance-buffs.md][1.4 implementation steps
+(archived)]].
+
 **** A. Remove weapon weakness
 
 - [x] Collapse ~WeaponDefinition~ to one ~damage~ value; delete
@@ -133,11 +136,14 @@ removed]]. Three substeps, in order.
 
 *** 1.5 Level transition
 
-- [ ] Implement ~Level_Transition~ as a real state: hold the frame, show the
+Plan: [[file:plans/archive/1.5-level-transition.md][1.5 implementation steps
+(archived)]].
+
+- [X] Implement ~Level_Transition~ as a real state: hold the frame, show the
       level number, advance.
-- [ ] Make it the single owner of level progression: derive the next seed, draw
+- [X] Make it the single owner of level progression: derive the next seed, draw
       the wave count, initialize the waves, reset per-level state.
-- [ ] Confirm and remove ~Level.end_chance~.
+- [X] Confirm and remove ~Level.end_chance~.
 
 *** 1.6 Verify the slice
 

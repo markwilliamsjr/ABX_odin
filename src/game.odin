@@ -28,6 +28,8 @@ WAVE_ENEMY_FLOOR :: 3
 MAX_WAVES :: 10
 MAX_REGIONS :: 10
 
+LEVEL_TRANSITION_TIME :: 5.0 // TEMP UNTIL SKILL TREE
+
 // ---- Types ----
 
 Game :: struct {
@@ -46,6 +48,11 @@ World :: struct {
 	state:         GameState,
 	master_seed:   u64,
 	return_roster: ReturnRoster,
+	transition:    LevelTransition,
+}
+
+LevelTransition :: struct {
+	elapsed, duration: f32,
 }
 
 Assets :: struct {
@@ -121,6 +128,7 @@ world_init :: proc(game: ^Game) {
 	}
 	game.world.player = player_init(SCREEN_WIDTH, SCREEN_HEIGHT)
 	level_init(&game.world.level, game.world.master_seed, game.config.level)
+	game.world.transition.duration = LEVEL_TRANSITION_TIME
 }
 
 assets_init :: proc(asset: ^Assets, renderer: ^sdl.Renderer) {
@@ -179,7 +187,21 @@ world_update :: proc(game: ^Game, keystate: [^]u8, delta_time: f32) {
 				return_roster_tick(&game.world.return_roster)
 			}
 		}
+		if level.level_end {
+			game.world.state = .Level_Transition
+			game.world.transition.elapsed = 0
+			fmt.printfln("[level %v] transition start", game.world.level.level_number)
+		}
 	case .Level_Transition:
+		game.world.transition.elapsed += delta_time
+		if game.world.transition.elapsed >= game.world.transition.duration {
+			done := game.world.level.level_number
+			next_level := game.world.level.level_number + 1
+			level_init(&game.world.level, game.world.master_seed, next_level)
+			fmt.printfln("[level %v] transition end next=%v", done, next_level)
+			game.world.bullets = {}
+			game.world.state = .Playing
+		}
 	case .Paused:
 	case .Game_Over:
 	}
@@ -407,6 +429,7 @@ render_state :: proc(game: ^Game, renderer: ^sdl.Renderer) {
 		render_world(&game.world, &game.assets, renderer)
 	case .Level_Transition:
 		render_world(&game.world, &game.assets, renderer)
+		render_level_transition(game, renderer)
 	case .Paused:
 		render_world(&game.world, &game.assets, renderer)
 	case .Game_Over:
@@ -439,6 +462,39 @@ render_menu :: proc(game: ^Game, renderer: ^sdl.Renderer) {
 	defer sdl.DestroyTexture(helper_texture)
 	helper_rect: sdl.Rect
 	helper: cstring = "Press 'ENTER' to start"
+	update_text(renderer, game.assets.debug_font, helper, &helper_texture, &helper_rect, 0, 280)
+	helper_rect.x = (SCREEN_WIDTH - helper_rect.w) / 2
+	sdl.RenderCopy(renderer, helper_texture, nil, &helper_rect)
+}
+
+render_level_transition :: proc(game: ^Game, renderer: ^sdl.Renderer) {
+	t := clamp(game.world.transition.elapsed / game.world.transition.duration, 0, 1)
+	fade := min(t * 10.0, 1.0)
+	alpha := u8(fade * 220)
+
+	sdl.SetRenderDrawBlendMode(renderer, .BLEND)
+	sdl.SetRenderDrawColor(renderer, 0, 0, 0, alpha)
+
+	overlay := sdl.Rect {
+		x = 0,
+		y = 0,
+		w = SCREEN_WIDTH,
+		h = SCREEN_HEIGHT,
+	}
+	sdl.RenderFillRect(renderer, &overlay)
+
+	title_texture: ^sdl.Texture
+	defer sdl.DestroyTexture(title_texture)
+	title_rect: sdl.Rect
+	title := fmt.ctprintfln("Level %v Cleared", game.world.level.level_number)
+	update_text(renderer, game.assets.debug_font, title, &title_texture, &title_rect, 0, 140)
+	title_rect.x = (SCREEN_WIDTH - title_rect.w) / 2
+	sdl.RenderCopy(renderer, title_texture, nil, &title_rect)
+
+	helper_texture: ^sdl.Texture
+	defer sdl.DestroyTexture(helper_texture)
+	helper_rect: sdl.Rect
+	helper := fmt.caprintfln("Wait for next level")
 	update_text(renderer, game.assets.debug_font, helper, &helper_texture, &helper_rect, 0, 280)
 	helper_rect.x = (SCREEN_WIDTH - helper_rect.w) / 2
 	sdl.RenderCopy(renderer, helper_texture, nil, &helper_rect)

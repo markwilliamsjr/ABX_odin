@@ -372,8 +372,9 @@ The crossing branch is the only part that changes in 1.3.
   still forms up, crosses, and completes against `spawn_count` — the count that
   actually spawned, not the budget. `enemy_count` remains the intended budget and
   is read only by the spawn check and the shortfall log.
-- `Level.level_end` is set but not consumed until 1.5. The existing
-  `wave_index < wave_count` guard stops updates.
+- `Level.level_end` is consumed by `.Level_Transition` to start the next level.
+  The `wave_index < wave_count` guard stops wave updates while the level is
+  ending.
 - Temporary `fmt` logging is the verification channel until the Clay overlay
   lands. Remove it when the overlay carries wave state.
 - This supersedes the "assign-and-display only" scope note under "Flee
@@ -1288,10 +1289,9 @@ silently dropped once.
   This is harmless while nothing observes it.
 - `--debug` is a development convenience and does not define a gameplay rule. If
   it ever conflicts with a real startup path, the real path wins.
-- `Level_Transition`, when implemented, will become the owner of level
-  progression. `world_init` will then hold the only initial generation and the
-  transition holds all later ones; the "one call site" rule applies per path, not
-  per program.
+- `Level_Transition` is the owner of level progression. `world_init` holds the
+  only initial generation and the transition holds all later ones; the "one
+  call site" rule applies per path, not per program.
 
 ## Sequencing
 

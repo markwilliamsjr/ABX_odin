@@ -238,6 +238,11 @@ documentation when available:
 * `DECISIONS.md` — why important decisions were made
 * `ROADMAP.org` — planned work
 * `SESSION.md` — current working context
+* `docs/plans/` — step-by-step plans for the active roadmap item
+
+Step plans live only under `docs/plans/`, one file per numbered roadmap item,
+starting from `_template.md`. When a step lands, set `Status: done`, add an
+Outcome, and move it to `docs/plans/archive/`.
 
 Do not contradict an established decision without explaining why
 you believe the decision should be reconsidered.
@@ -291,6 +296,7 @@ Possible destinations:
 * `DECISIONS.md`
 * `ROADMAP.org`
 * `SESSION.md`
+* `docs/plans/`
 
 Explain where it belongs before modifying the file if the destination
 is ambiguous.

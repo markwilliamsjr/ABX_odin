@@ -50,7 +50,7 @@ Implemented:
 - **Wave resolution.** The threshold test runs once spawning has finished, sets
   `threshold_crossed`, and removes nothing yet. A wave completes when everything
   that spawned has left play; `wave_index` then advances once, and the last wave
-  sets `level_end`. The transition itself is still 1.5.
+  sets `level_end` and hands off to the level transition.
 - **Procedural generation.** Seed derivation, entry-point selection, formation
   bounds, line formation layout, and entry paths. Entry is pinned to top-center
   for levels 1–2.
@@ -98,8 +98,18 @@ Implemented:
   species, buffs, and restored health preserved; overflow stays queued and a
   full roster drops the oldest. Return, roster push/drop, and flee-prohibited
   logs report the flow.
-- **App shell.** Menu, playing, and paused states; Esc pauses; `--debug` skips
-  the menu. `Level_Transition` and `Game_Over` exist but do nothing.
+- **Level transition.** When the last wave resolves, `.Playing` sees
+  `level_end` and switches to `.Level_Transition`. A `LevelTransition`
+  accumulator on `World` (temporary five-second duration) holds the frozen world
+  frame, dims it with a blended black overlay that fades in over the first 10%
+  of the hold, and draws `Level N Cleared` / `Wait for next level`. On expiry the
+  transition is the only caller of `level_init` for later levels, passing
+  `master_seed` and `level_number + 1`; it clears bullets and returns to
+  `.Playing`. The player keeps its position, and the return roster survives.
+  `Level.end_chance` is removed. `transition start` and `transition end` logs
+  report the handoff.
+- **App shell.** Menu, playing, level-transition, and paused states; Esc pauses;
+  `--debug` skips the menu. `Game_Over` exists but does nothing.
 - **CLI.** `--debug`, `--seed`, `--level`, `--no-vsync`, and `--help`.
   `--no-vsync` is parsed but not read; the renderer always enables vsync.
 - **Debug overlay.** FPS, game state, wave count, and the active wave's flee
@@ -111,8 +121,8 @@ Not yet implemented:
 - Per-species entry, hold, dive, and return behavior; the current non-Strep paths
   are placeholders (Phase 6). Frenzied does not yet affect their dive speeds.
 - Weapon switching and unlocks (Phase 7).
-- Real `Level_Transition` logic.
-- Clay UI, settings, skill tree, bosses, and adaptive wave composition.
+- Clay UI, settings, skill tree, bosses, and adaptive wave composition. The skill
+  tree will replace the temporary timed transition hold.
 - A working no-vsync path and frame limiter.
 - Unit tests.
 - Cross-platform release packaging.
