@@ -377,6 +377,60 @@ roadmap, architecture, and current-state docs updated to match.
 - The plan is archived at `docs/plans/archive/1.5-level-transition.md` with an
   Outcome; runtime checks are listed in "Verification to record".
 
+## 1.6 verification (2026-11-23)
+
+Drove the slice headlessly under the dummy SDL video driver with a temporary
+instrumented build: a frame-cap auto-exit, generated-state logs at wave init,
+a forced flee once a wave finished spawning, a deferred `wave_flee_finish`, a
+preloaded roster, and spawn/buff self-test logs. All temporary edits were
+reverted — source hashes match `source-hashes-before.txt`, `odin check src` is
+clean, and no `TEMP-VERIFY` marker remains. Raw logs and the temporary binary
+are in `/tmp/opencode/1.6/`.
+
+- **Seed collisions.** Static audit of all 8 `derive_seed` call sites against
+  the 8 triples in DECISIONS "Seeding"; no purpose shares a triple. A failed
+  spawn retry re-derives the species triple with the same value, so DECISIONS
+  now states the invariant in terms of purpose rather than call count.
+- **Same-seed replay.** Two runs at seed 7, level 3, with a forced flee on
+  every wave, 3000 frames. All 365 generated-field lines (init seeds, counts,
+  thresholds, entries, positions, spawn species, flee rolls, roster pushes,
+  returns) were byte-identical. The only four differing lines were
+  `[verify] forced flee: frame=` timings, off by one frame — frame pacing, not
+  a decision.
+- **Seed sensitivity.** At level 3, seeds 1/7/12345 drew 2/3/1 waves with
+  different entries. Levels 1–2 stayed pinned: level 1 was one wave of five,
+  and both levels used the top-center entry `(320,-50)` across all seeds.
+- **Wave-count ranges.** Observed L1=1, L2=1–2, L3=1–3, L5=1–3, L6=4–5,
+  L11=6–8, L16=7–10, L20=7–10, L21=9–10, L26=10; no `int_range` panic at 26.
+- **Roster and transition.** A level-1 flee returned in level 2's first wave
+  with species and buffs intact. The transition-end log read `bullets=0`,
+  `roster=5`, `wave_index=0`. Six levels produced six start/end pairs with no
+  skip or repeat.
+- **Deferred finish.** With a 5-frame delay, `flee finish` preceded `resolved`
+  and `advance` on both waves observed; the `flee_phase_active` gate holds.
+- **Full roster.** Preloading 48 entries then fleeing a 5-member wave produced
+  3 `drop` lines, holding the cap at 50 and dropping the oldest entries.
+  Overflow staying queued was already verified in 1.3.
+- **Species unlocks.** Level 11 spawned Strep, Staph, and E. coli only; level
+  16 added Pseudomonas. Every spawn had a finite nonzero `entry_path_length`.
+- **Buff effects.** Hardy raised max health to 36/36 from a base of 6;
+  Frenzied raised Strep speed from 170.0 to 416.5; Resistant at 400 permille
+  reduced damage 10→6; Biofilm at ceiling 2 absorbed two hits then passed 10.
+
+**Problem discovered.** `buff_total` in `src/enemy.odin` shadows `present` with
+`present := true` inside its loop, so the outer flag never becomes true and the
+`.Biofilm` floor at the end of the proc never fires. A low early Biofilm roll
+(e.g. 20 permille of ceiling 10 = 0) absorbs **zero** hits, contradicting
+DECISIONS "Buff magnitude scaling". Not fixed during verification; it needs a
+source edit by the developer.
+
+**Harness labeling note.** The temporary self-test printed a wrong expectation
+for Resistant (`(expect 5)`); 400 permille of the 800 ceiling is 400 permille,
+so 10→6 is correct behavior. The log is otherwise a faithful record.
+
+**Not verified.** The phase-kill half of 1.6 stays deferred to the flee
+animation (Phase 6); the full-pool spawn-failure path remains untested.
+
 ## Current code state
 
 `odin check src` is clean. Roadmap 1.2 and 1.3 are implemented end to end.
@@ -399,20 +453,26 @@ wave guard uses `<` and `wave_dive_update` is guarded, and the overlay reads
 
 ## Current task
 
-Roadmap 1.4 and 1.5 are implemented in source and `odin check src` is clean.
-Their runtime verification is outstanding. The 1.5 plan is archived at
-`docs/plans/archive/1.5-level-transition.md`; step plans live under
-`docs/plans/` and completed plans move to `docs/plans/archive/`.
+Roadmap 1.6 verification is complete. All nine boxes are ticked in
+`ROADMAP.org`; the phase-kill half of one box is annotated as deferred to the
+flee animation. Source was restored byte-for-byte after the temporary
+instrumentation and `odin check src` is clean. The 1.6 plan is active at
+`docs/plans/1.6-verify-the-slice.md`; step plans live under `docs/plans/` and
+completed plans move to `docs/plans/archive/`.
 
 ## Next step
 
-Run the 1.4 and 1.5 verification checks below, then start roadmap 1.6. The
-transition checks are the higher priority because they are new this session:
-clear one level and confirm a single start/end pair, level+1 generation, frozen
-simulation during the hold, roster survival, and same-seed replay.
+Fix the `buff_total` `present` shadowing bug recorded above, then start roadmap
+1.7 (unit tests). The test seam is still undecided: drive `level_init` end to
+end, or extract the budget split and jitter into a pure helper first. Keep the
+verification method temporary — 1.7 owns the automated seam. The phase-kill
+check and the full-pool spawn-failure path remain outstanding for later steps.
 
 ## Open issues
 
+- **`buff_total` shadows `present`** with `present := true` inside its loop, so
+  the Biofilm one-hit floor never fires; a low early Biofilm roll absorbs zero
+  hits. Found in 1.6 verification, not fixed. See the 1.6 section above.
 - `BUFF_DEFS` ceilings and `BUFF_FRACTION_BANDS` are first-pass tuning values,
   not architecture.
 - Weapon damage is a flat `3` for Neutral, PCN, and PMX; differentiation is

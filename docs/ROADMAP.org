@@ -147,20 +147,23 @@ Plan: [[file:plans/archive/1.5-level-transition.md][1.5 implementation steps
 
 *** 1.6 Verify the slice
 
-- [ ] Verify no seed collision across levels.
-- [ ] Seeded replay: same seed, two runs, identical wave composition,
+Plan: [[file:plans/1.6-verify-the-slice.md][1.6 verification steps]].
+
+- [X] Verify no seed collision across levels.
+- [X] Seeded replay: same seed, two runs, identical wave composition,
       formations, flee thresholds, and return schedules.
-- [ ] Different seeds produce observably different runs from level 3 onward;
+- [X] Different seeds produce observably different runs from level 3 onward;
       levels 1–2 are deliberately near-identical.
-- [ ] Level 1 is always one wave of five with a top-center entry across seeds.
-- [ ] Wave-count ranges widen with level as documented.
-- [ ] Flee and return do not perturb determinism.
-- [ ] The roster survives a level transition and returns in the next level's
+- [X] Level 1 is always one wave of five with a top-center entry across seeds.
+- [X] Wave-count ranges widen with level as documented.
+- [X] Flee and return do not perturb determinism.
+- [X] The roster survives a level transition and returns in the next level's
       first wave.
-- [ ] The flee phase completes before the wave advances; a phase kill counts as
-      destroyed and produces no roster entry. Deferred to the animation step,
-      because the phase is zero-length in 1.3.
-- [ ] A full roster drops its oldest entry; overflow returns stay queued rather
+- [X] The flee phase completes before the wave advances — verified with a
+      deferred finish. "A phase kill counts as destroyed and produces no roster
+      entry" is deferred to the flee-animation work (Phase 6); the phase is
+      zero-length in 1.3.
+- [X] A full roster drops its oldest entry; overflow returns stay queued rather
       than being lost.
 
 *** 1.7 Unit tests

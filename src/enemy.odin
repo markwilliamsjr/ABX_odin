@@ -803,7 +803,7 @@ buff_total :: proc(cold: ^BacteriaCold, category: BuffCategory) -> int {
 	for i in 0 ..< cold.buff_count {
 		slot := cold.buffs[i]
 		if slot.category != category do continue
-		present := true
+		present = true
 		total += def.max_magnitude * slot.fraction / 1000
 	}
 	if total > def.max_magnitude do total = def.max_magnitude

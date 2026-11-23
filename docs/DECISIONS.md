@@ -1211,7 +1211,7 @@ appears once.
   `Level_Transition` both need to derive seeds and only see `World`. Selection —
   fixed from `--seed` or clock-derived — still happens once, in `game_init`, and
   must be written before `world_init` runs.
-- The derivation graph has **seven** distinct `(parent, category, number)` triples
+- The derivation graph has **eight** distinct `(parent, category, number)` triples
   in a run:
   - `(master_seed, .Level, level_number)` → `level_seed`
   - `(level_seed, .Level, 0)` → the level's wave count
@@ -1219,8 +1219,17 @@ appears once.
   - `(wave_seed, .Entry, 0)` → entry points
   - `(wave_seed, .Level, 0)` → flee threshold
   - `(wave_seed, .Wave, 0)` → count jitter
+  - `(wave_seed, .Wave, 1 + spawn_index)` → fresh-spawn species (added with
+    species variety in 1.4; the `+1` keeps it clear of the jitter triple)
   - `(wave_seed, .Buff, slot_index)` → the buff for a bacterium fleeing from
     that wave
+- The species triple is re-derived on a failed spawn retry: `wave_update` returns
+  before advancing `spawn_index`, so the next spawn tick reaches the same triple
+  again. This is harmless because `derive_seed` is a pure function — the retry
+  produces the same species — but it means the uniqueness invariant is about
+  *purpose*, not byte-level call count: no triple may be used for two different
+  generated values. A literal "never reached twice" reading is violated by the
+  retry.
 - The buff triple is keyed by the fleeing bacterium's slot. A wave flees once, so
   each slot is used at most once per wave; a bacterium that returns and flees
   again does so under the new wave's seed.
