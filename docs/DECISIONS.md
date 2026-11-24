@@ -1023,15 +1023,18 @@ deterministic enemy waves"* — waves, not runs.
 
 ### Consequences
 
-- **The simulation is currently non-deterministic and violates this rule.** Three
-  sites need fixing:
-  - `src/level.odin:196` — `formation_complete_time = u64(sdl.GetTicks())` must
-    become a tick count.
-  - `src/level.odin:206` — `if u64(sdl.GetTicks()) >= wave.formation_complete_time`
-    is **always true**, since ticks only increase. The dive gate has never
-    actually gated anything, and `formation_complete_time` is currently dead.
-  - `src/game.odin:548` — `delta_time` derived from `GetTicks()` must be split:
-    real elapsed time for motion, fixed increments for the tick counter.
+- **Progress.** The clock split has landed: the main loop is the only wall-clock
+  reader, and it emits a 60 Hz tick count (`TICK_RATE`, clamped to
+  `MAX_TICKS_PER_FRAME` with the excess dropped). Wave spawn and dive timers, the
+  level transition, `flee_start_tick`, and `formation_complete_tick` all read that
+  clock; `delta_time` now feeds motion only. Of the three original violations,
+  two remain:
+  - The dive gate still compares `sdl.GetTicks()` against
+    `formation_complete_tick` — a mixed-unit leftover that remains always true.
+    It is scheduled for removal, not conversion.
+  - `formation_complete` is still derived from continuous entry motion and must
+    become tick-driven.
+  See `docs/plans/2-determinism.md` for the step split.
 - **`formation_complete` is the one real threat to this rule.** It is a decision
   derived from continuous motion: whether every bacterium has finished its entry
   path depends on accumulated time, so it could land on different ticks across

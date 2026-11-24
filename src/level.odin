@@ -37,10 +37,11 @@ ENTRY_POINTS := [ENTRY_POINT_COUNT]sdl.FPoint {
 Wave :: struct {
 	level, enemy_count, spawn_count, species_unlocked, max_simult_divers:     int,
 	threshold_permille:                                                       int,
-	spawn_delay, spawn_timer, dive_delay, dive_timer, speed_scalar:           f32,
+	spawn_delay_ticks, spawn_timer, dive_delay_ticks, dive_timer:             int,
+	speed_scalar:                                                             f32,
 	path:                                                                     PathType,
 	formation_complete, threshold_crossed, spawn_finished, flee_phase_active: bool,
-	flee_start_time, formation_complete_time, seed:                           u64,
+	flee_start_tick, formation_complete_tick, seed:                           u64,
 	control_points:                                                           [3]sdl.FPoint,
 	formation_positions:                                                      [MAX_REGIONS][MAX_ENEMIES]sdl.FPoint,
 	region_start:                                                             [MAX_REGIONS]sdl.FPoint,
@@ -74,8 +75,8 @@ wave_init :: proc(
 	wave.spawn_index = 0
 	wave.spawn_timer = 0
 	wave.dive_timer = 0
-	wave.flee_start_time = 0
-	wave.formation_complete_time = 0
+	wave.flee_start_tick = 0
+	wave.formation_complete_tick = 0
 	wave.destroyed_count = 0
 	wave.fled_count = 0
 	wave.spawn_region = 0
@@ -135,7 +136,8 @@ wave_init :: proc(
 
 	wave.path = wp.path_type
 	wave.speed_scalar = wp.speed_scalar
-	wave.spawn_delay = wp.spawn_delay
+	wave.spawn_delay_ticks = int(f32(wp.spawn_delay) * f32(TICK_RATE) + 0.5)
+	wave.dive_delay_ticks = int(f32(wp.dive_delay) * f32(TICK_RATE) + 0.5)
 	wave.enemy_count = enemy_count
 	wave.max_simult_divers = wp.max_simult_divers
 	wave.diver_selection_rule = wp.diver_selection_rule
@@ -197,12 +199,18 @@ level_init :: proc(level: ^Level, master_seed: u64, level_number: int) {
 }
 
 // ---- Update ----
-wave_update :: proc(wave: ^Wave, bacteria: ^Bacteria, roster: ^ReturnRoster, delta_time: f32) {
+wave_update :: proc(
+	wave: ^Wave,
+	bacteria: ^Bacteria,
+	roster: ^ReturnRoster,
+	ticks_this_frame: int,
+	total_tick: u64,
+) {
 	if !wave.spawn_finished {
-		wave.spawn_timer += delta_time
-		if wave.spawn_delay > wave.spawn_timer do return
+		wave.spawn_timer += ticks_this_frame
+		if wave.spawn_delay_ticks > wave.spawn_timer do return
 
-		wave.spawn_timer -= wave.spawn_delay
+		wave.spawn_timer -= wave.spawn_delay_ticks
 
 		for wave.spawn_region < wave.region_count &&
 		    wave.spawn_index >= wave.region_enemy_count[wave.spawn_region] {
@@ -280,7 +288,7 @@ wave_update :: proc(wave: ^Wave, bacteria: ^Bacteria, roster: ^ReturnRoster, del
 				wave.spawn_count,
 				wave.threshold_permille,
 			)
-			wave_flee_begin(wave, bacteria, wave.level)
+			wave_flee_begin(wave, bacteria, wave.level, total_tick)
 		}
 	}
 
@@ -299,12 +307,12 @@ wave_update :: proc(wave: ^Wave, bacteria: ^Bacteria, roster: ^ReturnRoster, del
 		}
 		if all_holding && owned == wave.spawn_count {
 			wave.formation_complete = true
-			wave.formation_complete_time = u64(sdl.GetTicks())
+			wave.formation_complete_tick = total_tick
 		}
 	}
 }
 
-wave_flee_begin :: proc(wave: ^Wave, bacteria: ^Bacteria, level: int) {
+wave_flee_begin :: proc(wave: ^Wave, bacteria: ^Bacteria, level: int, total_tick: u64) {
 	fleeing := 0
 	for i in 0 ..< MAX_ENEMIES {
 		if !bacteria.hot[i].active do continue
@@ -327,17 +335,27 @@ wave_flee_begin :: proc(wave: ^Wave, bacteria: ^Bacteria, level: int) {
 		wave.flee_phase_active = true
 	}
 	if wave.flee_phase_active {
-		wave.flee_start_time = u64(sdl.GetTicks())
+		wave.flee_start_tick = total_tick
 		fmt.printfln("[wave %v] flee begin: fleeing=%v", wave.index, fleeing)
 	}
 }
 
-wave_flee_update :: proc(wave: ^Wave, bacteria: ^Bacteria, roster: ^ReturnRoster) {
+wave_flee_update :: proc(
+	wave: ^Wave,
+	bacteria: ^Bacteria,
+	roster: ^ReturnRoster,
+	total_tick: u64,
+) {
 	if !wave.flee_phase_active do return
-	wave_flee_finish(wave, bacteria, roster)
+	wave_flee_finish(wave, bacteria, roster, total_tick)
 }
 
-wave_flee_finish :: proc(wave: ^Wave, bacteria: ^Bacteria, roster: ^ReturnRoster) {
+wave_flee_finish :: proc(
+	wave: ^Wave,
+	bacteria: ^Bacteria,
+	roster: ^ReturnRoster,
+	total_tick: u64,
+) {
 	for i in 0 ..< MAX_ENEMIES {
 		if !bacteria.hot[i].active do continue
 		if bacteria.cold[i].wave_index != wave.index do continue
@@ -360,23 +378,24 @@ wave_flee_finish :: proc(wave: ^Wave, bacteria: ^Bacteria, roster: ^ReturnRoster
 		wave.fled_count += 1
 	}
 	wave.flee_phase_active = false
-	elapsed_ms := u64(sdl.GetTicks()) - wave.flee_start_time
+	elapsed_ticks := total_tick - wave.flee_start_tick
 	fmt.printfln(
 		"[wave %v] flee finish: fled=%v; roster=%v; elapsed=%vms",
 		wave.index,
 		wave.fled_count,
 		roster.count,
-		elapsed_ms,
+		(elapsed_ticks * 1000) / u64(TICK_RATE),
 	)
 }
 
-wave_dive_update :: proc(wave: ^Wave, bacteria: ^Bacteria, delta_time: f32) {
+wave_dive_update :: proc(wave: ^Wave, bacteria: ^Bacteria, ticks_this_frame: int) {
 	if !wave.formation_complete do return
 
-	wave.dive_timer += delta_time
-	if wave.dive_delay > wave.dive_timer do return
+	wave.dive_timer += ticks_this_frame
+	if wave.dive_delay_ticks > wave.dive_timer do return
 
-	if u64(sdl.GetTicks()) >= wave.formation_complete_time {
+
+	if u64(sdl.GetTicks()) >= wave.formation_complete_tick {
 		divers_count := 0
 		for i in 0 ..< MAX_ENEMIES {
 			if !bacteria.hot[i].active do continue

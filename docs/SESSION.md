@@ -2,6 +2,8 @@
 
 ## Date
 
+2026-11-24 (Phase 2 steps 1–3 implemented; tick clock, transition and wave
+timers converted)
 2026-11-24 (Phase 3A planned; wave pressure, handoff, and placement decisions
 recorded; 3A.1 step plan written)
 2026-11-23 (1.6 verified; plan archived; Biofilm floor fix recorded)
@@ -10,6 +12,44 @@ recorded; 3A.1 step plan written)
 2026-11-21 (1.4 decisions settled and docs updated; implementation not started)
 2026-11-19 (1.3 steps one–six plus the return spawn path, verified; 1.2
 complete 2026-11-05; earlier work 2026-11-01 and 2026-10-31)
+
+## Phase 2 progress (2026-11-24)
+
+Steps 1–3 of `docs/plans/2-determinism.md` are implemented; `odin check src` is
+clean. `odin check src -vet` still shows only the five findings already deferred
+to Phase 1 gate 1.8.
+
+- **Tick producer.** Both `sdl.GetTicks` calls in the main loop are one clock: the
+  pre-loop seed and the per-frame read. From `delta_time` the loop emits
+  `ticks_this_frame` (accumulator at `TICK_RATE = 60`, clamped to
+  `MAX_TICKS_PER_FRAME = 5`) and `total_tick` (monotonic), passing both
+  explicitly into `world_update` alongside `delta_time`.
+- **Overrun policy.** On a long frame the accumulator clamps and zeroes the
+  remainder (clamp-and-drop), so a stall cannot leave every later frame
+  re-clamped at the maximum.
+- **Transition.** `LevelTransition.elapsed`/`duration` are ticks;
+  `LEVEL_TRANSITION_TICKS = 5 * TICK_RATE`; the overlay divides as `f32`, so the
+  dim still ramps instead of integer-snapping.
+- **Wave timers.** `spawn_delay_ticks`/`dive_delay_ticks` are converted once in
+  `wave_init` with `+ 0.5` rounding (0.3s → 18 ticks). `spawn_timer` and
+  `dive_timer` accumulate `ticks_this_frame`; `flee_start_tick` and
+  `formation_complete_tick` store `total_tick`. `wave_update`, `wave_flee_begin`,
+  `wave_flee_update`, `wave_flee_finish`, and `wave_dive_update` take tick
+  values instead of `delta_time`.
+- **Bugs fixed during the step.** The spawn branch briefly decremented
+  `spawn_delay_ticks` instead of subtracting it from `spawn_timer`, shrinking the
+  interval toward zero. The first clamp branch left the remainder untouched, so
+  every later frame re-clamped to 5 ticks.
+- **Naming.** The two wave timestamps were renamed `_time` → `_tick`, and
+  `LEVEL_TRANSITION_TIME` → `LEVEL_TRANSITION_TICKS`. A field that holds ticks
+  must not be named `_time`; that mismatch is what makes ms/ticks bugs easy.
+- **Still wall-clock.** The always-true dive gate
+  (`u64(sdl.GetTicks()) >= formation_complete_tick`, now a mixed-unit compare
+  that is still true) and the eight dead `state_start_time` writes in
+  `enemy.odin`. Steps 4–7 own the comparisons, the gate removal, tick-driven
+  formation completion, and the dead writes.
+- **Not yet run.** The plan's jitter/same-seed runtime checks are pending; only
+  compile checks are recorded so far.
 
 ## 3A planning (2026-11-24)
 
@@ -480,20 +520,27 @@ wave guard uses `<` and `wave_dive_update` is guarded, and the overlay reads
 
 ## Current task
 
-Planning for the new Phase 3A is written up; no source changed. `DECISIONS.md`
-carries "Wave pressure", "Wave handoff", and "Formation position and species".
-`ROADMAP.org` has the phase with five steps and one new open decision. The 3A.1
-step plan is active at `docs/plans/3A.1-wave-cadence-and-difficulty.md`. The
-1.6/Phase 1 work remains verified and `odin check src` was clean at last check.
+Phase 2 (Determinism) is in progress. Steps 1–3 of
+`docs/plans/2-determinism.md` are implemented and `odin check src` is clean;
+step 4 (integer timer comparisons) is next. Phase 1's 1.7 and 1.8 are still
+open, so this remains a deliberate phase-order deviation. The 3A planning output
+stands: `DECISIONS.md` carries "Wave pressure", "Wave handoff", and "Formation
+position and species", and `ROADMAP.org` has the phase with five steps. The 3A.1
+step plan is written but not started.
 
 ## Next step
 
-Close Phase 1 (1.7 unit tests and 1.8 vet review), then Phases 2 and 3, before
-starting 3A.1. The 1.7 test seam is still undecided: drive `level_init` end to
-end, or extract the budget split and jitter into a pure helper first. The
-phase-kill check and the full-pool spawn-failure path remain outstanding. If you
-want to feel the change before those phases land, use temporary edits
-(`spawn_delay`, forced wave counts) and revert them, as in 1.6.
+Continue Phase 2 at step 4: make the spawn and dive gates integer tick
+comparisons, then step 5 (remove the dive gate), step 6 (tick-driven
+`formation_complete`), and step 7 (dead `state_start_time` writes). Run the
+jitter and same-seed checks before the phase gate, where `odin check src -vet`
+must also be clean. After Phase 2, close Phase 1 (1.7 unit tests and 1.8 vet
+review) if the deviation is to be reconciled, then Phases 3 and 3A. The 1.7 test
+seam is still undecided: drive `level_init` end to end, or extract the budget
+split and jitter into a pure helper first. The phase-kill check and the
+full-pool spawn-failure path remain outstanding. If you want to feel the change
+before those phases land, use temporary edits (`spawn_delay`, forced wave
+counts) and revert them, as in 1.6.
 
 ## Open issues
 
@@ -519,14 +566,17 @@ want to feel the change before those phases land, use temporary edits
   phase kill cannot be observed and the counter rule is unverified.
 - `fled_count` settles at finish, which makes the resolution gate load-bearing;
   the gate has not been exercised with a deferred finish.
-- `LEVEL_TRANSITION_TIME` is a temporary five-second hold. The temp-allocator
-  leak in the transition text is accepted until the skill tree replaces the UI.
+- `LEVEL_TRANSITION_TICKS` is a temporary five-second hold (`5 * TICK_RATE`). The
+  temp-allocator leak in the transition text is accepted until the skill tree
+  replaces the UI.
 - The transition dims and returns to full brightness at the swap; there is no
   fade-in on the new level. A true crossfade would need a second accumulator in
   `.Playing`.
 - `--no-vsync` is parsed but never read; the renderer always enables vsync.
-- Decisions still read wall-clock time: `formation_complete_time`, the dive
-  gate, `flee_start_time` (log only), and `delta_time`.
+- One decision still reads wall-clock time in mixed units: the always-true dive
+  gate compares `sdl.GetTicks()` to `formation_complete_tick`. `formation_complete`
+  is still derived from continuous entry motion. Phase 2 steps 4–7 own both;
+  `flee_start_tick` is now tick-domain and log-only.
 - `wave_init` writes `region_enemy_count[i] = result.placed` for every region,
   i.e. the full total into each. Correct while `compute_formation_bounds`
   returns 1; wrong when it returns more.

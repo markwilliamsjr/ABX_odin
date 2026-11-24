@@ -21,6 +21,9 @@ SCREEN_HEIGHT :: 360
 WINDOW_WIDTH :: 1280
 WINDOW_HEIGHT :: 720
 
+TICK_RATE :: 60
+MAX_TICKS_PER_FRAME :: 5
+
 WEAPON_COUNT :: 50
 MAX_BULLETS :: 50
 MAX_ENEMIES :: 50
@@ -28,7 +31,7 @@ WAVE_ENEMY_FLOOR :: 3
 MAX_WAVES :: 10
 MAX_REGIONS :: 10
 
-LEVEL_TRANSITION_TIME :: 5.0 // TEMP UNTIL SKILL TREE
+LEVEL_TRANSITION_TICKS :: 5 * TICK_RATE // TEMP UNTIL SKILL TREE
 
 // ---- Types ----
 
@@ -52,7 +55,7 @@ World :: struct {
 }
 
 LevelTransition :: struct {
-	elapsed, duration: f32,
+	elapsed, duration: int,
 }
 
 Assets :: struct {
@@ -128,7 +131,7 @@ world_init :: proc(game: ^Game) {
 	}
 	game.world.player = player_init(SCREEN_WIDTH, SCREEN_HEIGHT)
 	level_init(&game.world.level, game.world.master_seed, game.config.level)
-	game.world.transition.duration = LEVEL_TRANSITION_TIME
+	game.world.transition.duration = LEVEL_TRANSITION_TICKS
 }
 
 assets_init :: proc(asset: ^Assets, renderer: ^sdl.Renderer) {
@@ -160,7 +163,13 @@ assets_init :: proc(asset: ^Assets, renderer: ^sdl.Renderer) {
 
 // ---- Update ----
 
-world_update :: proc(game: ^Game, keystate: [^]u8, delta_time: f32) {
+world_update :: proc(
+	game: ^Game,
+	keystate: [^]u8,
+	ticks_this_frame: int,
+	total_tick: u64,
+	delta_time: f32,
+) {
 	switch game.world.state {
 	case .Menu:
 	case .Playing:
@@ -175,14 +184,20 @@ world_update :: proc(game: ^Game, keystate: [^]u8, delta_time: f32) {
 				&game.world.level.wave[level.wave_index],
 				&level.bacteria,
 				&game.world.return_roster,
-				delta_time,
+				ticks_this_frame,
+				total_tick,
 			)
 			wave_flee_update(
 				&game.world.level.wave[level.wave_index],
 				&level.bacteria,
 				&game.world.return_roster,
+				total_tick,
 			)
-			wave_dive_update(&game.world.level.wave[level.wave_index], &level.bacteria, delta_time)
+			wave_dive_update(
+				&game.world.level.wave[level.wave_index],
+				&level.bacteria,
+				ticks_this_frame,
+			)
 			if wave_resolution_update(&game.world.level) {
 				return_roster_tick(&game.world.return_roster)
 			}
@@ -193,7 +208,7 @@ world_update :: proc(game: ^Game, keystate: [^]u8, delta_time: f32) {
 			fmt.printfln("[level %v] transition start", game.world.level.level_number)
 		}
 	case .Level_Transition:
-		game.world.transition.elapsed += delta_time
+		game.world.transition.elapsed += ticks_this_frame
 		if game.world.transition.elapsed >= game.world.transition.duration {
 			done := game.world.level.level_number
 			next_level := game.world.level.level_number + 1
@@ -468,7 +483,7 @@ render_menu :: proc(game: ^Game, renderer: ^sdl.Renderer) {
 }
 
 render_level_transition :: proc(game: ^Game, renderer: ^sdl.Renderer) {
-	t := clamp(game.world.transition.elapsed / game.world.transition.duration, 0, 1)
+	t := clamp(f32(game.world.transition.elapsed) / f32(game.world.transition.duration), 0, 1)
 	fade := min(t * 10.0, 1.0)
 	alpha := u8(fade * 220)
 
@@ -621,12 +636,25 @@ main :: proc() {
 	last_time := sdl.GetTicks()
 	running := true
 
+	tick_remainder: f32 = 0.0
+	total_tick := u64(0)
+
 	// GAME LOOP
 
 	for running {
 		current_time := sdl.GetTicks()
 		delta_time := f32(current_time - last_time) / 1000.0
 		last_time = current_time
+
+		tick_remainder += delta_time
+		ticks_this_frame := int(tick_remainder * TICK_RATE)
+		if ticks_this_frame > MAX_TICKS_PER_FRAME {
+			ticks_this_frame = MAX_TICKS_PER_FRAME
+			tick_remainder = 0
+		} else {
+			tick_remainder -= f32(ticks_this_frame) / TICK_RATE
+		}
+		total_tick += u64(ticks_this_frame)
 
 		game_handle_events(&game, &event, &running)
 		keystate := sdl.GetKeyboardState(nil)
@@ -635,7 +663,7 @@ main :: proc() {
 		debug_update(&game.debug, delta_time)
 
 		// GAME UPDATES
-		world_update(&game, keystate, delta_time)
+		world_update(&game, keystate, ticks_this_frame, total_tick, delta_time)
 		// RENDER
 		render_state(&game, game.renderer)
 		debug_render(&game.debug, &game.assets, &game.world, game.renderer)

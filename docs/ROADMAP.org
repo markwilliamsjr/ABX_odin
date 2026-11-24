@@ -192,9 +192,10 @@ Plan: [[file:plans/archive/1.6-verify-the-slice.md][1.6 verification steps
 
 Make decisions tick-driven and keep wall-clock time for motion only.
 
-- [ ] Split ~delta_time~ into real elapsed time for motion and a fixed-increment
+- [X] Split ~delta_time~ into real elapsed time for motion and a fixed-increment
       tick counter for decisions.
-- [ ] Convert ~formation_complete_time~ from ~sdl.GetTicks()~ to a tick count.
+- [X] Convert ~formation_complete_time~ from ~sdl.GetTicks()~ to a tick count
+      (now ~formation_complete_tick~).
 - [ ] Fix the always-true dive gate.
 - [ ] Make ~formation_complete~ tick-driven rather than derived from continuous
       motion.

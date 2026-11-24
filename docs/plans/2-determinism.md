@@ -1,6 +1,6 @@
 # Roadmap 2 — Determinism
 
-Status: active
+Status: active — steps 1–3 landed (`odin check src` clean); step 4 next
 Roadmap: ROADMAP.org 2
 Decisions: DECISIONS.md "Determinism", "State machine", "Vet review cadence"
 Session: SESSION.md
@@ -57,9 +57,9 @@ removal of a dive gate that currently never gates anything.
   values whose shape this phase changes.
 - Capture the 1.6 same-seed baseline log for generated fields. Generation
   happens at init and must remain byte-identical.
-- Note stale line references in DECISIONS "Determinism": it cites
-  `src/level.odin:196`, `:206` and `src/game.odin:548`. The current code is
-  `level.odin:302`, `:379` and `game.odin:628`. Fix these as part of this step.
+- The stale line references in DECISIONS "Determinism" (`level.odin:196`, `:206`,
+  `game.odin:548`) were corrected when steps 1–3 landed; that bullet now
+  describes the two remaining sites instead of three.
 - Note the temporary edits to make and revert: `delta_time` jitter injection for
   the decisive determinism check, and logs of decision ticks. Compare source
   hashes afterwards, as in 1.6.
@@ -68,17 +68,22 @@ removal of a dive gate that currently never gates anything.
 
 ### 1. Produce ticks at one wall-clock site — `src/game.odin`, main loop
 
-- Keep `sdl.GetTicks` as the only wall-clock read in the program. Beside the
-  existing `delta_time`, accumulate real elapsed time into a remainder and emit
-  an integer tick count for the frame.
-- Pass the tick count explicitly into `world_update` alongside `delta_time`.
+- Keep `sdl.GetTicks` as the only wall-clock read in the program. Both calls in
+  the loop are that one clock: the pre-loop `last_time` seed and the per-frame
+  `current_time`. Do not pass either raw value into the simulation.
+- From `delta_time`, accumulate a remainder and emit two tick values per frame:
+  `ticks_this_frame` (elapsed this frame) and `total_tick` (monotonic running
+  total). Clamp `ticks_this_frame` to `MAX_TICKS_PER_FRAME`; the overrun policy
+  is in Open choices.
+- Pass both values explicitly into `world_update` alongside `delta_time`.
   Explicit data flow is preferred over hidden state on `World` (PROJECT
   "Important Principles").
 - Keep the accumulator and its remainder in one place so no other system can
   read wall-clock time.
 
-Check: a stable 60 fps produces one tick per frame on average; a temporary log
-shows no other `GetTicks` call site feeding a decision.
+Check: a stable 60 fps produces one tick per frame on average; a stall is handled
+according to the chosen overrun policy without a burst of decisions; a temporary
+log shows no other `GetTicks` call site feeding a decision.
 
 ### 2. Convert the transition accumulator — `src/game.odin`, `world_update`
 
@@ -94,31 +99,37 @@ Check: the hold still lasts the same real time at 60 fps, and exactly one
 ### 3. Move wave timers into ticks — `src/level.odin`, `Wave` and `wave_init`
 
 - Plugs into `Wave.spawn_timer`, `Wave.dive_timer`,
-  `Wave.formation_complete_time`, and `Wave.flee_start_time`, all reset in
+  `Wave.formation_complete_tick`, and `Wave.flee_start_tick`, all reset in
   `wave_init`.
+- Split the fields by meaning. `spawn_timer` and `dive_timer` are accumulators:
+  they add `ticks_this_frame` and stay integer counters.
+  `formation_complete_tick` and `flee_start_tick` are timestamps: they store
+  `total_tick`, and elapsed time is read as `total_tick - stamp`. The `_tick`
+  suffix is deliberate: no field holding ticks may be named `_time`.
 - Change them to tick-domain integers. Convert `spawn_delay` and `dive_delay`
   once at the initialization boundary so the current 0.3s interval is preserved
   at 60 fps rather than silently retuned.
-- Keep `flee_start_time` meaningful for the elapsed-time log, but in ticks.
+- Keep `flee_start_tick` meaningful for the elapsed-time log, but in ticks.
 
 Check: a stable 60 fps run spawns at the same real-time intervals as the
-baseline; same seed still produces identical generated fields at wave init.
+baseline; same seed still produces identical generated fields at wave init; a
+timestamp taken before an accumulator clamp still reads a sane elapsed value.
 
 ### 4. Convert the two timer comparisons — `src/level.odin`, `wave_update` and
 `wave_dive_update`
 
 - Plugs into the spawn gate (`spawn_timer` versus `spawn_delay`) and the dive
   gate (`dive_timer` versus `dive_delay`).
-- Make both integer tick comparisons. Keep the existing one-spawn / one-diver-
-  selection-per-frame behavior: accumulate ticks, compare `>=`, subtract the
-  delay once.
+- Make both integer tick comparisons. Add `ticks_this_frame` to the timer, then
+  keep the existing one-spawn / one-diver-selection-per-frame behavior: compare
+  `>=`, subtract the delay once.
 
 Check: no spawn or selection consumes more than one slot per frame, even when
 several ticks land in one frame.
 
 ### 5. Remove the vacuous dive gate — `src/level.odin`, `wave_dive_update`
 
-- Plugs into the `GetTicks() >= formation_complete_time` comparison, which is
+- Plugs into the `GetTicks() >= formation_complete_tick` comparison, which is
   always true because the clock is monotonic and the timestamp is in the past.
 - Delete the comparison. The `formation_complete` early return already gates
   diving, so this changes no behavior and removes a wall-clock read from a
@@ -155,9 +166,10 @@ is clean.
 
 ### 8. Update the docs — `docs/DECISIONS.md`, `docs/SESSION.md`
 
-- Amend "Determinism" with the accumulator tick semantics, the deferred-timer
-  classification, and the corrected line references. Amend "State machine" only
-  if the transition clock wording needs it.
+- Amend "Determinism" with the accumulator tick semantics and the deferred-timer
+  classification. The line references and tick-domain field names were corrected
+  when steps 1–3 landed; keep the Consequences bullet in sync if steps 4–7 move
+  the remaining sites.
 - Record the step outcome in `SESSION.md`: tick rate, clamp policy, and what was
   observed in the jitter check.
 
@@ -176,7 +188,7 @@ gate, and audit scope — are settled. Two implementation details remain:
 Recommendation: clamp and drop the excess; record the potential drift.
 
 **2. Flee log timestamps.**
-- Use the tick clock for `flee_start_time` and the elapsed-ms log: makes logs
+- Use the tick clock for `flee_start_tick` and the elapsed-ms log: makes logs
   compare cleanly across same-seed runs — recommended.
 - Leave the log on wall-clock time: it is not a decision, so the determinism
   rule permits it, but 1.6 already saw these lines differ between runs.
