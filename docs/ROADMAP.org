@@ -22,6 +22,9 @@ Decide each before writing the code that depends on it.
 - [ ] **Boss shape, roster entry, meter interaction** — deferred with Phase 8,
       but decide before tuning difficulty.
 - [ ] **Settings precedence and runtime vsync fallback** — blocks Phase 5.
+- [ ] **Species-to-slot-class mapping** — decide before 3A.4. Which species
+      prefer front slots, which prefer back, and whether the bias is a rule or a
+      weighted tendency. See [[file:DECISIONS.md::Formation position and species][Formation position and species]].
 
 ** Phase 1 — Level and wave lifecycle (current)
 
@@ -213,6 +216,30 @@ Vsync is the normal pacer; the limiter exists only for the no-vsync path.
 - [ ] Correct the help text.
 - [ ] Verify: ~--vsync false~ at 60 fps, ~--fps 0~ unbounded, vsync on at monitor
       rate, ~--fps 144 --vsync false~ at 144.
+
+- [ ] **Vet review.** Run ~odin check src -vet~ and resolve every finding before
+      closing the phase. The phase is not verified while vet is dirty.
+
+** Phase 3A — Wave cadence and formations
+
+Inserted after Phase 3 (frame pacing) and before Phase 6 (enemy behavior) and
+Phase 7 (skill tree). Cadence is tuned against tick-driven decisions and the
+final frame limiter, and the handoff seam exists before the flee phase gains
+animation duration. Later phase numbers are left unchanged to avoid churning
+cross-references in the other docs.
+
+- [ ] **3A.1 Wave cadence and difficulty ramp** — peak pressure non-decreasing;
+      next wave overlaps the current wave's resolve.
+      Plan: [[file:plans/3A.1-wave-cadence-and-difficulty.md][3A.1 implementation steps]].
+- [ ] **3A.2 Real formation layouts** — implement V and semicircle in
+      ~generate_formation~; seed-pick a formation per wave.
+- [ ] **3A.3 Multiple formations per wave** — ~compute_formation_bounds~ returns
+      N regions; per-region counts; entry points gated by level.
+- [ ] **3A.4 Position-based species placement** — front means closer to the
+      player; returners take the slot class matching their species. Resolve the
+      open decision above first.
+- [ ] **3A.5 Dynamic feel** — seed-pick entry path types, raise simultaneous
+      divers, and hand off motion work to Phase 6.
 
 - [ ] **Vet review.** Run ~odin check src -vet~ and resolve every finding before
       closing the phase. The phase is not verified while vet is dirty.

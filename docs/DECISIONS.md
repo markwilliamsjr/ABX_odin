@@ -1319,6 +1319,10 @@ systems risks rework.
 
 - `ARCHITECTURE.md`'s skill tree is committed *intent*, not a speculative idea,
   but it is not next.
+- Wave cadence and formation variety are scheduled as Phase 3A, after Phase 3
+  (frame pacing) and before Phase 6 (enemy behavior) and Phase 7 (skill tree).
+  Tuning before frame pacing would need re-tuning; the handoff seam must exist
+  before the flee phase gains animation duration.
 - The boss meter and boss fights described in `ARCHITECTURE.md` are also deferred.
   Their interaction with fleeing-driven difficulty is an open question: two
   escalating systems can stack multiplicatively and quietly break difficulty
@@ -1352,3 +1356,91 @@ new cadence.
   folding vet cleanup into an individual step such as 1.3.
 - The gate names `odin check src -vet` explicitly. If a `make vet` target is
   added later, the gate text should point at it.
+
+## Wave pressure
+
+### Decision
+
+Difficulty is measured by **peak simultaneous enemies**, not by total level
+budget or average per-wave size. Each level's peak must be non-decreasing as
+levels rise. The budget stays `3 + level*2` and is split across waves under
+"Enemy counts"; the drawn wave count is constrained so a rising budget cannot
+produce a smaller peak.
+
+### Reason
+
+Level 1 fields five enemies in one wave. Level 2 draws one or two waves under a
+budget of seven; the two-wave case splits into four and three, so the largest
+cluster the player sees drops from five to four. The budget rose while the
+pressure fell, which is the opposite of the intended ramp. Average share is a
+poor proxy for what the player feels.
+
+### Consequences
+
+- Wave count stays a seeded draw. Only its bound is constrained, so no run
+  history enters wave seeding and level 1's one-wave-of-five shape survives.
+- A bound alone is not enough if waves stay sequential: the next wave cannot
+  begin before the current one clears, so peak pressure still drops at the
+  handoff. This decision depends on "Wave handoff".
+- Flee thresholds and buff scaling are untouched. Peak pressure is a generation
+  invariant, not a combat rule.
+
+## Wave handoff
+
+### Decision
+
+The next wave begins spawning while the current wave is still resolving. A wave
+still ends only when all of its own members resolve, never on a timer; what
+changes is that resolution of one wave is no longer a global gate on the next
+wave's spawn. The next wave may overlap the current wave's flee phase.
+
+### Reason
+
+Today the last kill of wave N is followed by wave N+1's full `spawn_delay`
+before its first spawn, so there is an idle gap between waves. The player asked
+for no break. The gap would grow when Phase 6 gives the flee phase duration and
+exit motion, because advancement already waits for that phase.
+
+### Consequences
+
+- `wave_index` is no longer the sole authority for which wave is active. A
+  bounded active window is needed in `world_update`; the exact size is a tuning
+  choice for step 3A.1.
+- Ownership is already carried on the bacterium by wave index, so multiple
+  active waves need no new identity field or composite key.
+- The roster tick still fires once per wave completion, not once per frame.
+- Level end still requires every wave to resolve. Overlap changes when a wave
+  starts, not when the level ends.
+- Phase 6 adds duration and motion to the flee phase only. It must not become a
+  gate on the next wave's first spawn, or it restores the gap this decision
+  removes.
+
+## Formation position and species
+
+### Decision
+
+"Front" means closer to the player, not earlier in spawn order. Species
+placement is a bias by formation slot class: certain species are more likely in
+front slots and others behind. A returning bacterium keeps its species and is
+assigned to the slot class matching that species.
+
+### Reason
+
+The player wants some bacteria predominantly in front and others behind, and
+wants the mix to feel composed rather than drawn per spawn index. Keeping the
+class rule for returners preserves the settled decision that bacteria never
+change species while still making placement meaningful for them.
+
+### Consequences
+
+- Species choice moves from the spawn-index draw in `wave_update` to a
+  position-aware assignment. This changes the purpose of the
+  `(wave_seed, .Wave, 1 + spawn_index)` triple in "Seeding"; that section must be
+  updated when step 3A.4 lands.
+- Returners keep their species and their resistance buffs; only their slot class
+  is chosen by the same rule as fresh spawns.
+- The per-species class mapping, and whether the bias is a hard rule or a
+  weighted tendency, are still open. They are tracked in ROADMAP.org's "Before
+  starting: open decisions" and must be settled before 3A.4.
+- The decision applies to generation only. It does not change entry, hold, dive,
+  or return motion, which Phase 6 owns.

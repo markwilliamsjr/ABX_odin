@@ -2,12 +2,38 @@
 
 ## Date
 
+2026-11-24 (Phase 3A planned; wave pressure, handoff, and placement decisions
+recorded; 3A.1 step plan written)
 2026-11-23 (1.6 verified; plan archived; Biofilm floor fix recorded)
 2026-11-23 (1.5 implemented and archived; docs updated)
 2026-11-23 (1.4 implemented; species dives are placeholders)
 2026-11-21 (1.4 decisions settled and docs updated; implementation not started)
 2026-11-19 (1.3 steps one–six plus the return spawn path, verified; 1.2
 complete 2026-11-05; earlier work 2026-11-01 and 2026-10-31)
+
+## 3A planning (2026-11-24)
+
+No source changed; decisions recorded in `DECISIONS.md`, a new phase inserted in
+`ROADMAP.org`, and the 3A.1 step plan written under `docs/plans/`.
+
+Planning session settled four questions:
+
+- Difficulty is measured by **peak simultaneous enemies**, non-decreasing per
+  level. The level-2 dip is real: budget rises 5→7 but the two-wave case splits
+  into 4+3, so peak cluster falls from five to four.
+- The next wave **overlaps** the current wave's resolve and flee phase. A wave
+  still ends only when its own members resolve; that is no longer a global gate
+  on the next wave's spawn. Phase 6's flee animation must not restore the gap.
+- The work is scheduled as **Phase 3A**, after Phase 3 (frame pacing) and before
+  Phase 6 (enemy behavior) and Phase 7 (skill tree). Later phase numbers were
+  left unchanged to avoid churning cross-references.
+- "Front" means **closer to the player**, not earlier in spawn order. Returners
+  take the slot class matching their species. The per-species class mapping and
+  whether the bias is a hard rule remain open, tracked in ROADMAP.org.
+
+The phase is split into five steps: 3A.1 cadence and ramp, 3A.2 real layouts,
+3A.3 multiple regions, 3A.4 position-based species, 3A.5 dynamic feel. Only 3A.1
+has a written plan so far.
 
 ## Goal
 
@@ -454,20 +480,20 @@ wave guard uses `<` and `wave_dive_update` is guarded, and the overlay reads
 
 ## Current task
 
-Roadmap 1.6 verification is complete. All nine boxes are ticked in
-`ROADMAP.org`; the phase-kill half of one box is annotated as deferred to the
-flee animation. Source was restored byte-for-byte after the temporary
-instrumentation and `odin check src` is clean. The 1.6 plan is archived with an
-Outcome at `docs/plans/archive/1.6-verify-the-slice.md`, and the roadmap link
-points there. The Biofilm floor fix landed in the same commit.
+Planning for the new Phase 3A is written up; no source changed. `DECISIONS.md`
+carries "Wave pressure", "Wave handoff", and "Formation position and species".
+`ROADMAP.org` has the phase with five steps and one new open decision. The 3A.1
+step plan is active at `docs/plans/3A.1-wave-cadence-and-difficulty.md`. The
+1.6/Phase 1 work remains verified and `odin check src` was clean at last check.
 
 ## Next step
 
-Start roadmap 1.7 (unit tests). The test seam is still undecided: drive
-`level_init` end to end, or extract the budget split and jitter into a pure
-helper first. Keep the verification method temporary — 1.7 owns the automated
-seam. The phase-kill check and the full-pool spawn-failure path remain
-outstanding for later steps.
+Close Phase 1 (1.7 unit tests and 1.8 vet review), then Phases 2 and 3, before
+starting 3A.1. The 1.7 test seam is still undecided: drive `level_init` end to
+end, or extract the budget split and jitter into a pure helper first. The
+phase-kill check and the full-pool spawn-failure path remain outstanding. If you
+want to feel the change before those phases land, use temporary edits
+(`spawn_delay`, forced wave counts) and revert them, as in 1.6.
 
 ## Open issues
 
