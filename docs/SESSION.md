@@ -2,6 +2,8 @@
 
 ## Date
 
+2026-11-26 (docs/tmp folded into the roadmap; Phase 3B scrolling background
+decided)
 2026-11-24 (Phase 2 steps 1–3 implemented; tick clock, transition and wave
 timers converted)
 2026-11-24 (Phase 3A planned; wave pressure, handoff, and placement decisions
@@ -12,6 +14,52 @@ recorded; 3A.1 step plan written)
 2026-11-21 (1.4 decisions settled and docs updated; implementation not started)
 2026-11-19 (1.3 steps one–six plus the return spawn path, verified; 1.2
 complete 2026-11-05; earlier work 2026-11-01 and 2026-10-31)
+
+## Roadmap expansion (2026-11-26)
+
+No source changed. The `docs/tmp` material was folded into `ROADMAP.org` and the
+supporting docs:
+
+- **Phase 3B — Scrolling layered background** added after 3A. Two 32×32 panel
+  layers scroll downward at different speeds; each panel loops through 3–4
+  frames; the per-level subset, panel, and orientation are seeded. The front
+  layer is sparse and the pattern is periodic so vertical scrolling wraps
+  without a seam. Decision recorded in `DECISIONS.md` "Background composition";
+  step plan at `docs/plans/3B-scrolling-background.md`.
+- **Phase 4A — Debug UI expansion** added from `docs/tmp/debug_ui.md`: player,
+  enemy, and procgen sections; collision visualisation; debug actions; polish.
+- **Phase 6** gains the first roster expansion (Clostridium and Klebsiella) and
+  encounter composition from `docs/tmp/bacteria_design.md`.
+- **Phase 12 — Visual identity and presentation** added from
+  `docs/tmp/branding.md`: palette, typography, wordmark, title screen, UI
+  conventions, and promotional assets.
+- **Deferred and exploratory** section added for the remaining roster,
+  encounter, branding, and debug-UI possibilities. These are not commitments.
+
+## Decision pass (2026-11-26)
+
+Settled the near-term open items:
+
+- Species placement uses a continuous depth score: a preferred depth per species
+  in 3A.4, with relation scoring (near, avoid, pair, protect, leader/follow) in
+  Phase 6. Starting preferred depths are E. coli 0.8, Staph 0.7, Strep 0.5, and
+  Pseudomonas 0.2.
+- Phase 4A debug actions: collision/hitbox toggle, restart level, advance level,
+  spawn selected species, and force flee. Restart is a clean level slate;
+  advance preserves the return roster.
+- Settings: defaults < saved < CLI with CLI session-only; a runtime vsync
+  failure falls back to the limiter with a notice and is not persisted; settings
+  is a page inside `.Menu`.
+- Palette: 3B uses a temporary palette; Phase 12 finalizes it and recolors the
+  atlas.
+- Roster: Clostridium (on-death spore hazard, level-owned hazard list) and
+  Klebsiella (armored protector aura) are the first Phase 6 expansion. The five
+  starting encounter patterns are recorded in Phase 6; the remaining roster is a
+  prioritized backlog table with a promote-when condition per candidate.
+- Survival: Phase 5B added before Phase 6 because the hazard and bosses need a
+  fail state. Health bar with variable damage at the bottom-left; mutual contact
+  damage; a global invulnerability window; reachable `.Game_Over` offering retry
+  level or restart run. Clostridium's hazard depends on this path.
 
 ## Phase 2 progress (2026-11-24)
 
@@ -535,9 +583,10 @@ comparisons, then step 5 (remove the dive gate), step 6 (tick-driven
 `formation_complete`), and step 7 (dead `state_start_time` writes). Run the
 jitter and same-seed checks before the phase gate, where `odin check src -vet`
 must also be clean. After Phase 2, close Phase 1 (1.7 unit tests and 1.8 vet
-review) if the deviation is to be reconciled, then Phases 3 and 3A. The 1.7 test
-seam is still undecided: drive `level_init` end to end, or extract the budget
-split and jitter into a pure helper first. The phase-kill check and the
+review) if the deviation is to be reconciled, then Phases 3, 3A, 3B, 4, 5, and
+5B. The 1.7
+test seam is still undecided: drive `level_init` end to end, or extract the
+budget split and jitter into a pure helper first. The phase-kill check and the
 full-pool spawn-failure path remain outstanding. If you want to feel the change
 before those phases land, use temporary edits (`spawn_delay`, forced wave
 counts) and revert them, as in 1.6.
@@ -546,6 +595,14 @@ counts) and revert them, as in 1.6.
 
 - `BUFF_DEFS` ceilings and `BUFF_FRACTION_BANDS` are first-pass tuning values,
   not architecture.
+- Phase 3B's 20/60 px/s layer speeds, 4+4 per-level panel subset, 30–40% front
+  occupancy, and 128-row period are first-pass tuning values, not architecture.
+- Phase 5B's maximum health, per-species contact damage, hazard damage,
+  invulnerability duration, and the health-restore policy between levels are
+  first-pass tuning values; the damage path and reset semantics are the
+  architecture.
+- Species placement's preferred depths and relation weights are first-pass
+  tuning values. The relation table is sparse and grows with the roster.
 - Weapon damage is a flat `3` for Neutral, PCN, and PMX; differentiation is
   Phase 7 work.
 - No weapon switching control exists; `current_ammo` is set once in `player_init`.

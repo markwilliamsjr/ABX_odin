@@ -21,10 +21,33 @@ Decide each before writing the code that depends on it.
       [[file:DECISIONS.md::Buff magnitude scaling][Buff magnitude scaling]].
 - [ ] **Boss shape, roster entry, meter interaction** — deferred with Phase 8,
       but decide before tuning difficulty.
-- [ ] **Settings precedence and runtime vsync fallback** — blocks Phase 5.
-- [ ] **Species-to-slot-class mapping** — decide before 3A.4. Which species
-      prefer front slots, which prefer back, and whether the bias is a rule or a
-      weighted tendency. See [[file:DECISIONS.md::Formation position and species][Formation position and species]].
+- [X] **Species-to-slot-class mapping** — resolved: continuous depth score in
+      3A.4, with a preferred depth per species; relational rules (near, avoid,
+      pair, protect, leader/follow) land in Phase 6 with the group behaviors. See
+      [[file:DECISIONS.md::Formation position and species][Formation position and species]].
+- [X] **Background composition** — resolved: two vertically scrolling layers of
+      32×32 panels, back slow and front fast, sparse front coverage, periodic
+      vertical wrap, and a seeded per-level subset. See
+      [[file:DECISIONS.md::Background composition][Background composition]].
+- [X] **Debug UI action surface** — resolved: Phase 4A includes a collision and
+      hitbox toggle, restart level, advance level, spawn selected species, and
+      force flee. Stat editing, runtime seed/level reload, boss-meter controls,
+      and skill-tree actions stay out.
+- [X] **Settings precedence and runtime vsync fallback** — resolved: defaults <
+      saved < CLI with CLI session-only; a failed runtime vsync falls back to the
+      software limiter with a notice and is not persisted; settings live inside
+      `.Menu`. See [[file:DECISIONS.md::Settings persistence and fallback][Settings persistence and fallback]].
+- [ ] **Branding direction** — palette timing is resolved: Phase 3B uses a
+      temporary palette and Phase 12 recolors the atlas. Still open: final
+      palette, typography, and logo. Blocks Phase 12; not a gameplay dependency.
+      See ~docs/tmp/branding.md~.
+- [X] **Roster expansion picks** — resolved: Clostridium and Klebsiella are the
+      first Phase 6 expansion. Clostridium leaves an on-death spore hazard;
+      Klebsiella has an armored protector aura. See the Phase 6 section.
+- [X] **Player survival and damage** — resolved: health bar with variable
+      damage, mutual contact damage, a global invulnerability window, and a
+      reachable game over offering retry level or restart run. See
+      [[file:DECISIONS.md::Player survival and damage][Player survival and damage]].
 
 ** Phase 1 — Level and wave lifecycle (current)
 
@@ -237,10 +260,39 @@ cross-references in the other docs.
 - [ ] **3A.3 Multiple formations per wave** — ~compute_formation_bounds~ returns
       N regions; per-region counts; entry points gated by level.
 - [ ] **3A.4 Position-based species placement** — front means closer to the
-      player; returners take the slot class matching their species. Resolve the
-      open decision above first.
+      player. Use a continuous depth score with a preferred depth per species;
+      returners use the same score. Relational placement is Phase 6.
 - [ ] **3A.5 Dynamic feel** — seed-pick entry path types, raise simultaneous
       divers, and hand off motion work to Phase 6.
+
+- [ ] **Vet review.** Run ~odin check src -vet~ and resolve every finding before
+      closing the phase. The phase is not verified while vet is dirty.
+
+** Phase 3B — Scrolling layered background
+
+Inserted after Phase 3A and before Phase 4. Two layers of 32×32 panels scroll
+downward at different speeds to imply forward motion. Each panel loops through
+3–4 frames. Panel choice, orientation, and the per-level subset are seeded. The
+front layer is sparse so the back layer reads through it, and the pattern is
+periodic so vertical scrolling wraps without a special seam. Presentation only:
+no gameplay, collision, or determinism decision reads it.
+
+Decision: [[file:DECISIONS.md::Background composition][Background composition]].
+Plan: [[file:plans/3B-scrolling-background.md][3B implementation steps]].
+
+- [ ] **3B.1 Atlas and data model.** Define the 16-panel atlas, its frame
+      layout, the two layer configurations, and the seeded selection of panel
+      and orientation.
+- [ ] **3B.2 Seeded per-level composition.** Draw a cohesive panel subset from
+      the level seed and build a periodic tile pattern; same seed, same pattern.
+- [ ] **3B.3 Scroll and animate.** Scroll the back layer slowly and the front
+      layer quickly, wrap the pattern vertically, and loop each panel through
+      its frames. Keep pixel alignment at 640×360.
+- [ ] **3B.4 State integration.** Advance scroll and animation in the menu and
+      during play; hold the current offset and frame while paused and in the
+      level transition.
+- [ ] **3B.5 Verify.** Frame time, texture lifetime, same-seed pattern, no
+      visible wrap seam, front-layer visibility, and no gameplay regression.
 
 - [ ] **Vet review.** Run ~odin check src -vet~ and resolve every finding before
       closing the phase. The phase is not verified while vet is dirty.
@@ -264,17 +316,72 @@ command.
 - [ ] Port the debug overlay, then the menu, then settings.
 - [ ] Add the pending ~wave_index~ and ~enemy_count~ lines to the overlay.
 
+*** 4A. Debug UI expansion
+
+Follows the Clay port. Future sections and actions land only when the underlying
+system exists. Source: ~docs/tmp/debug_ui.md~.
+
+- [ ] Add player, enemy, and procedural-generation diagnostic sections.
+- [ ] Add collision and hitbox visualisation.
+- [ ] Add debug actions: toggle collision/hitbox visualisation, restart the
+      current level with the same seed and level number, advance to the next
+      level through the normal transition path, spawn a selected species into
+      the active wave, and force the current wave to flee.
+- [ ] Restart uses a clean level state; advance preserves the return roster. The
+      asymmetry is deliberate: restart is for clean comparisons, advance mimics
+      real play.
+- [ ] Keep stat editing, runtime seed/level reload, boss-meter controls, and
+      skill-tree actions out of 4A.
+- [ ] Add collapsible sections and visual hierarchy polish.
+- [ ] Keep audio, accessibility, control configuration, and the full settings
+      menu as separate roadmap items.
+
 - [ ] **Vet review.** Run ~odin check src -vet~ and resolve every finding before
       closing the phase. The phase is not verified while vet is dirty.
 
 ** Phase 5 — Settings menu
 
-- [ ] Add a settings page for vsync and the FPS cap.
-- [ ] Persist settings to disk and load them before the CLI is applied.
-- [ ] Toggle vsync at runtime via ~sdl.RenderSetVSync~, with a fallback for
-      backends where it fails.
+- [ ] Add a settings page for vsync and the FPS cap inside `.Menu`; do not add a
+      new top-level state.
+- [ ] Persist settings to disk and load them before the CLI is applied. Saved
+      values are the baseline; CLI flags override them for the current session
+      only.
+- [ ] Write a menu change to the saved file immediately.
+- [ ] Toggle vsync at runtime via ~sdl.RenderSetVSync~. On failure, set vsync
+      false for the session, fall back to the software limiter at the current
+      FPS target, show a notice, and do not persist the failure.
 - [ ] Apply a new FPS target immediately and reset the deadline when it changes.
 - [ ] Keep ~--fps 0~ out of the menu; it is a testing value.
+
+- [ ] **Vet review.** Run ~odin check src -vet~ and resolve every finding before
+      closing the phase. The phase is not verified while vet is dirty.
+
+** Phase 5B — Player survival and damage
+
+Inserted after Phase 5 and before Phase 6. This is the missing fail state: health,
+contact damage, hazards, invulnerability, and a reachable game over. Phase 6's
+Clostridium hazard and Phase 8's bosses both assume it.
+
+Decision: [[file:DECISIONS.md::Player survival and damage][Player survival and damage]].
+
+- [ ] Add player health with variable damage: maximum, current, and a
+      bottom-left health bar.
+- [ ] Make bacteria contact mutual: the bacterium damages the player and takes
+      contact damage itself, but is not destroyed outright by the contact. It
+      dies only if the contact damage brings its health to zero.
+- [ ] Give the player a short global invulnerability window after a hit, with
+      visible feedback, so one contact cannot drain several hits in a frame.
+- [ ] Route hazard damage through the same player-damage path. Phase 6's spore
+      hazard is the first consumer.
+- [ ] Make `.Game_Over` reachable at zero health and offer **Retry level** and
+      **Restart run**.
+- [ ] Retry re-initializes the current level from the run seed and level number.
+      Restart re-initializes from level 1 with the run seed. Both reset player
+      health, bullets, hazards, and the return roster deliberately.
+- [ ] Decide and record whether health carries between levels or is restored on
+      advance; keep the policy in one place.
+- [ ] Keep boss and hazard balance out of this phase; it only builds the damage
+      path and the fail state.
 
 - [ ] **Vet review.** Run ~odin check src -vet~ and resolve every finding before
       closing the phase. The phase is not verified while vet is dirty.
@@ -287,11 +394,40 @@ Separate species identity from reusable gameplay behaviors.
 - [ ] Define reusable attack behaviors.
 - [ ] Define reusable defensive traits.
 - [ ] Define reusable group behaviors.
+- [ ] Define the formation relation vocabulary (near, avoid, pair, protect,
+      leader/follow) as part of the group-behavior model.
 - [ ] Define reusable lifecycle behaviors.
 - [ ] Refactor the existing four species to compose these behaviors.
+- [ ] Add a sparse formation relation table and score it into the 3A.4 depth
+      placement pass.
 - [ ] Replace the duplicated placeholder entry, hold, dive, and return blocks
       with per-species behaviors; have Frenzied reach every species' dive speed.
+- [ ] Add one shared behavior used by at least two species before adding new
+      species.
+- [ ] Add the first roster expansion: Clostridium and Klebsiella, composed from
+      existing building blocks.
+      - **Clostridium:** slow, holds position, and leaves a temporary spore
+        hazard on death. The hazard lives in a level-owned hazard list, not the
+        bacteria pool, so `spawn_count`/`destroyed_count` and wave resolution are
+        untouched. It damages the player through the Phase 5B damage path.
+      - **Klebsiella:** slow, high durability, with a short-range aura that
+        reduces damage taken by nearby allies. It is the anchor a cluster forms
+        around.
 - [ ] Add new bacteria using combinations of existing behaviors.
+- [ ] Add encounter composition from species + behavior + formation + entry
+      pattern; only valid, readable combinations.
+- [ ] Cover the five starting encounter patterns:
+      - **Protected swarm** — Klebsiella front-center, Strep clustered behind.
+        Kill the protector or split the swarm.
+      - **Fast pressure** — E. coli front, Strep mid/back. Prioritize the fast
+        threats.
+      - **Spore field** — Staph front, Clostridium back. Reach the spore-maker
+        before hazards fill the space.
+      - **Split attack** — E. coli and Pseudomonas in two regions. Switch sides
+        without losing the center.
+      - **Mixed movement** — Strep front/mid, Pseudomonas back. Track the erratic
+        species without ignoring the baseline.
+- [ ] Keep the remaining candidate roster in the deferred backlog table.
 - [ ] Verify behavior composition preserves seeded determinism.
 
 - [ ] **Vet review.** Run ~odin check src -vet~ and resolve every finding before
@@ -351,3 +487,52 @@ Development stays Linux-only. Releases are built natively on each OS.
 
 - [ ] **Vet review.** Run ~odin check src -vet~ and resolve every finding before
       closing the phase. The phase is not verified while vet is dirty.
+
+** Phase 12 — Visual identity and presentation
+
+Settles the brand direction recorded in ~docs/tmp/branding.md~. None of this
+blocks gameplay; it starts once the playable identity is stable.
+
+- [ ] Settle the in-game palette and typography.
+- [ ] Recolor the Phase 3B background atlas if the temporary palette changed.
+- [ ] Design the ABX! wordmark, the X treatment, the exclamation mark, and a
+      monochrome variant.
+- [ ] Build the title screen and UI visual conventions.
+- [ ] Apply the palette and type to the Clay UI and debug overlay.
+- [ ] Create website and promotional assets.
+
+- [ ] **Vet review.** Run ~odin check src -vet~ and resolve every finding before
+      closing the phase. The phase is not verified while vet is dirty.
+
+** Deferred and exploratory
+
+Recorded for traceability; not commitments. Promote an item only when a concrete
+decision moves it into a phase.
+
+- **Remaining roster backlog** — Clostridium and Klebsiella are promoted to
+  Phase 6. The rest are evaluated in the table below.
+- **Encounter compositions** — promoted to Phase 6 as the five starting
+  patterns. New patterns are added there with the species that motivate them.
+- **Branding explorations** — logo concepts, X and exclamation treatments,
+  palette tests, typography tests, website and promo templates.
+- **Debug UI future sections** — audio, accessibility, and control
+  configuration.
+
+*** Remaining roster backlog evaluation
+
+Evaluate each candidate by what the current roster does not cover.
+
+| Candidate | Role | Required behaviors | Overlap risk | Promote when |
+|---|---|---|---|---|
+| Salmonella | Fast, erratic attacker | High-speed movement, irregular pathing | Overlaps E. coli's fast pressure | E. coli alone makes levels feel samey |
+| Helicobacter | Corrosive area control | Lingering ground effect, contact damage | Overlaps Clostridium's hazard | The spore hazard works and a second hazard type is wanted |
+| Vibrio | Splitting threat | On-death split into smaller units | Overlaps wave accounting and caps | Entity caps and wave resolution handle splits cleanly |
+| Bacillus | Spore armor | Temporary armored phase, then vulnerability | Overlaps Klebsiella's durability | Armor and damage reduction are shared traits |
+| Neisseria | Paired attackers | Pair relation, synchronized dive | Overlaps Strep's swarm | The relation table and group behaviors exist |
+| Enterococcus | Support / buff spreader | Aura that benefits allies | Overlaps Klebsiella's aura | Auras are a reusable shared behavior |
+| Borrelia | Evasive attacker | Sidestep or dodge behavior | Overlaps Pseudomonas's movement | Movement behaviors are compositional |
+| Mycobacterium | Slow, very durable | High health, slow advance | Overlaps Klebsiella's tank role | Klebsiella proves the protector distinction |
+| Chlamydia | Hidden / delayed threat | Spawns later from an existing enemy | Overlaps lifecycle behaviors | Lifecycle composition is stable |
+
+Promote a candidate only when its "promote when" condition is true and its role
+adds a decision the current roster lacks.

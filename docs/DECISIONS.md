@@ -1125,18 +1125,93 @@ deadline accounting keeps the average rate correct without catch-up bursts.
   `config.fps` live rather than caching the target at startup, or a menu change
   will not take effect until restart.
 
-### Open questions (not yet decided)
+### Resolved
 
-- **Settings precedence.** Once a settings menu persists vsync and the FPS cap,
-  does a CLI flag override the saved value for that run, or write through to it?
-  The usual answer is defaults < saved < CLI, session-only, but it is not
-  decided.
-- **Runtime vsync failure.** `SDL_RenderSetVSync` can fail on some backends. Is
-  the fallback a restart prompt, or a renderer recreation that re-inits assets?
-- **Menu structure.** A settings page is either a mode inside `.Menu` or a new
-  `GameState`. `.Menu` currently owns only a title and a hint, and the skill tree
-  is already promised `Level_Transition`, so the two should not compete for the
-  same mount point.
+Settings precedence, runtime vsync failure, and the menu structure are settled
+in "Settings persistence and fallback".
+
+## Settings persistence and fallback
+
+### Decision
+
+Settings precedence is defaults < saved < CLI. The CLI override applies to the
+current session only; a change made in the settings menu writes to the saved
+file.
+
+If `SDL_RenderSetVSync` fails at runtime, the game falls back to the software
+frame limiter at the current FPS target, shows a notice, and does not persist the
+failure. The renderer is not recreated.
+
+Settings live as a page inside `.Menu`. They do not get a new top-level
+`GameState`; `.Level_Transition` remains the skill-tree mount point.
+
+### Reason
+
+The standard precedence is least surprising: a saved preference survives
+restarts, while a one-off CLI flag is clearly a testing override. Recreating the
+renderer to recover vsync would invalidate every loaded texture and force an
+asset reload for a setting the limiter already covers. A separate state for a
+single menu page adds dispatch and render branches without adding behavior.
+
+### Consequences
+
+- `--vsync` and `--fps` override the saved values for that run only.
+- A menu change updates the saved file immediately; it does not wait for exit.
+- A runtime vsync failure is a session state, not a saved setting. The next
+  launch retries vsync.
+- The limiter must read the live FPS target, as recorded in "Frame pacing".
+- `.Menu` gains a page enum; the title page remains the entry page.
+
+## Player survival and damage
+
+### Decision
+
+The player has a health bar with variable damage, drawn at the bottom-left.
+
+Contact is mutual. A bacterium that touches the player deals its contact damage to
+the player and takes contact damage itself. The contact does not destroy the
+bacterium outright; it dies only if the contact damage brings its health to zero.
+After any hit the player has a short global invulnerability window with visible
+feedback, so one contact cannot drain several hits in consecutive frames.
+
+Hazard damage uses the same player-damage path. Phase 6's Clostridium spore hazard
+is the first hazard consumer; Phase 8 bosses use the same path.
+
+At zero health the game enters `.Game_Over`, which offers **Retry level** and
+**Restart run**:
+
+- Retry re-initializes the current level from the run seed and level number.
+- Restart re-initializes from level 1 with the run seed.
+
+Both reset player health, bullets, hazards, and the return roster deliberately.
+
+### Reason
+
+Variable damage lets species and hazards differ in threat without a second health
+model. Mutual contact keeps collision meaningful: touching a bacterium is costly
+to both sides, but the player cannot clear a wave by ramming. A global
+invulnerability window is the simplest way to stop frame-by-frame drain without
+per-bacterium cooldown state.
+
+Retry and restart cover two different intentions: clean practice of the current
+level, and a fresh run. The run seed keeps a retry identical to the level the
+player just lost.
+
+### Consequences
+
+- `.Game_Over` becomes reachable; the state-machine decision and the state table
+  in `ARCHITECTURE.md` must reflect it.
+- Player health lives on the player or world and survives level transitions
+  unless the restore policy says otherwise. Whether health restores on level
+  advance is a tuning choice; the policy must live in one place.
+- Retry and restart are separate reset paths. Each must reset the return roster,
+  bullets, hazards, buffs, and world timers; a partial reset is a bug.
+- The Phase 4A debug restart reuses the retry path; debug advance reuses the
+  normal transition path.
+- Contact damage values, the invulnerability duration, and maximum health are
+  tuning constants, not architecture.
+- Hazards are level-owned and damage through this path; they do not enter the
+  bacteria pool or change wave accounting.
 
 ## State machine
 
@@ -1260,11 +1335,10 @@ main loop ignores `world.state` entirely, updating every system unconditionally.
 - "Minimal menu" means only enough to start the game: state gating, an entry
   action, and a visible hint. A full menu — options, quit confirmation, and so on
   — is separate work.
-- Every `GameState` variant should be reachable except `.Game_Over`, which has no
-  trigger: the player has no health field, nothing detects player-bacteria
-  collision, and no damage is applied to the player. Making it reachable would
-  mean inventing a death condition, which is a design decision rather than
-  cleanup. It stays a deliberate dead enum value until that decision is made.
+- Every `GameState` variant must be reachable. `.Game_Over` becomes reachable
+  with Phase 5B player health; before that it had no trigger.
+- Phase 5B defines the death condition: player health reaches zero through the
+  contact and hazard damage path. See "Player survival and damage".
 
 ## Menu and debug entry
 
@@ -1422,17 +1496,47 @@ exit motion, because advancement already waits for that phase.
 
 ### Decision
 
-"Front" means closer to the player, not earlier in spawn order. Species
-placement is a bias by formation slot class: certain species are more likely in
-front slots and others behind. A returning bacterium keeps its species and is
-assigned to the slot class matching that species.
+"Front" means closer to the player, not earlier in spawn order. Depth is a
+continuous coordinate across the formation, from 0 at the back edge to 1 at the
+front edge.
+
+**3A.4 owns depth bias.** Each species has a preferred depth. Placement scores an
+empty slot by how close its depth is to that preference:
+
+```
+depth_score = 1000 * (1 - abs(slot.depth - species.preferred_depth))
+```
+
+The score is used as a seeded weight. There is no discrete front/mid/back class.
+Starting preferred depths: E. coli 0.8, Staph 0.7, Strep 0.5, Pseudomonas 0.2.
+These are tuning values.
+
+**Phase 6 owns relationships.** They use one relation vocabulary and add to the
+same score:
+
+| Relation | Placement effect |
+|---|---|
+| near | +weight for each pair within the neighborhood |
+| avoid | −weight for each pair within the neighborhood |
+| pair | +weight when the two are adjacent; zero otherwise |
+| protect | +weight when the protector is near the protected |
+| leader/follow | +weight when the follower is near the leader and farther from the player |
+
+Relationships land with the group behaviors, so a formation never advertises a
+relationship that does not function yet. A returning bacterium keeps its species
+and is placed by the same depth and relation score.
 
 ### Reason
 
-The player wants some bacteria predominantly in front and others behind, and
-wants the mix to feel composed rather than drawn per spawn index. Keeping the
-class rule for returners preserves the settled decision that bacteria never
-change species while still making placement meaningful for them.
+Continuous depth preserves the front/back intent without forcing a formation
+into arbitrary class boundaries. A V or semicircle already places slots at a
+range of distances from the player; a preferred-depth score uses that shape
+directly, and a species like Strep can sit anywhere without being quantized into
+a class.
+
+The relation vocabulary is the same set of group behaviors Phase 6 implements.
+Keeping depth in 3A.4 and relations in Phase 6 keeps each phase honest: 3A.4 gets
+positional variety, and Phase 6 gets connections that actually do something.
 
 ### Consequences
 
@@ -1440,10 +1544,59 @@ change species while still making placement meaningful for them.
   position-aware assignment. This changes the purpose of the
   `(wave_seed, .Wave, 1 + spawn_index)` triple in "Seeding"; that section must be
   updated when step 3A.4 lands.
-- Returners keep their species and their resistance buffs; only their slot class
-  is chosen by the same rule as fresh spawns.
-- The per-species class mapping, and whether the bias is a hard rule or a
-  weighted tendency, are still open. They are tracked in ROADMAP.org's "Before
-  starting: open decisions" and must be settled before 3A.4.
+- Returners keep their species and their resistance buffs; they use the same
+  depth and relation score as fresh spawns.
+- Depth is a preference, not a constraint. Every slot fills; the score only
+  decides which bacterium is most likely to take it.
+- Relations are preferences, not constraints. An unsatisfiable relation degrades
+  to the depth score rather than failing generation.
+- Phase 6 adds a sparse relation table. `pair` and `protect` can require
+  adjacency or proximity; `leader/follow` is directional, with the follower
+  preferring a slot near the leader and farther from the player.
 - The decision applies to generation only. It does not change entry, hold, dive,
   or return motion, which Phase 6 owns.
+
+## Background composition
+
+### Decision
+
+The background is two vertically scrolling layers of 32×32 panels, both seeded
+from the level seed. The back layer scrolls slowly and the front layer quickly;
+the speed difference is what reads as forward motion. Proposed starting speeds
+are 20 px/s for the back layer and 60 px/s for the front.
+
+Sixteen panels are authored: eight for the back layer and eight for the front.
+Each level draws a cohesive subset — four back and four front as a starting
+point. Panel choice and one of eight orientations (four rotations × two flips)
+are seeded per tile.
+
+The front layer is sparse: a seeded hash places panels over roughly 30–40% of
+the tiles, leaving gaps for the back layer. The tile pattern is periodic in Y so
+scrolling wraps without a special seam. A 128-row period is the starting length.
+
+Scroll and animation advance in `.Menu` and `.Playing`; they freeze in `.Paused`
+and `.Level_Transition`.
+
+### Reason
+
+A static layered collage does not create depth; differential vertical scrolling
+does, and it supports the fiction that the ship is moving forward through the
+arena. A periodic pattern scrolls a randomized collage without a visible wrap
+seam or a second generation mechanism. A sparse front layer preserves the back
+layer instead of hiding it.
+
+### Consequences
+
+- Presentation only. No decision, spawn, or wave logic reads the background.
+- Appending `.Background` to `SeedCategory` keeps existing category ordinals.
+- Same seed, same background; different seeds, different subsets and layouts.
+- The pattern repeats every period length. A longer period delays recognition at
+  the cost of memory; 128 rows is the starting point.
+- Scroll speed, subset size, and occupancy are tuning constants, not
+  architecture.
+- The menu uses the same background; pause and transition hold the current
+  offset and animation frame.
+- A later camera or player-motion parallax would add an offset to layer
+  positions; it should not change selection or wrapping.
+- Phase 3B uses a temporary palette. Phase 12 finalizes the palette and recolors
+  the atlas; the selection, scroll, and wrap model are unaffected.

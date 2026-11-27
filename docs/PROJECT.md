@@ -109,7 +109,8 @@ Implemented:
   `Level.end_chance` is removed. `transition start` and `transition end` logs
   report the handoff.
 - **App shell.** Menu, playing, level-transition, and paused states; Esc pauses;
-  `--debug` skips the menu. `Game_Over` exists but does nothing.
+  `--debug` skips the menu. `Game_Over` exists but is unreachable until Phase 5B
+  adds player health.
 - **CLI.** `--debug`, `--seed`, `--level`, `--no-vsync`, and `--help`.
   `--no-vsync` is parsed but not read; the renderer always enables vsync.
 - **Debug overlay.** FPS, game state, wave count, and the active wave's flee
@@ -118,6 +119,11 @@ Implemented:
 Not yet implemented:
 
 - Fleeing animation.
+- Player health, contact and hazard damage, invulnerability, game over, and the
+  health bar (Phase 5B).
+- Scrolling layered 32×32 panel background (Phase 3B).
+- Branding, logo, palette, typography, and presentation assets (Phase 12).
+- Clostridium and Klebsiella, the first Phase 6 roster expansion.
 - Per-species entry, hold, dive, and return behavior; the current non-Strep paths
   are placeholders (Phase 6). Frenzied does not yet affect their dive speeds.
 - Weapon switching and unlocks (Phase 7).

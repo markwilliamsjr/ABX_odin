@@ -56,7 +56,7 @@ phase rather than scattered through the loop.
 | `.Playing` | full simulation | world |
 | `.Paused` | nothing | world, frozen |
 | `.Level_Transition` | level progression; holds the frame and advances | world or transition output |
-| `.Game_Over` | nothing; unreachable today | world |
+| `.Game_Over` | input only: retry-level and restart-run choices | world, frozen, plus the game-over UI |
 
 Both switches are exhaustive, not partial. Adding a `GameState` must fail the
 build until someone answers "what does this state update?" and "what does it
@@ -70,6 +70,22 @@ drawing is not paused, it is broken.
 `--debug` starts directly in `.Playing` and enables the overlay, skipping the
 menu. The level is generated in both paths, so there is a single call site for
 initial level generation.
+
+## Player damage and failure
+
+Player health is a variable-damage bar. Bacteria contact is mutual: the bacterium
+deals contact damage and takes contact damage, but is not destroyed by the contact
+unless its health reaches zero. A short global invulnerability window follows any
+hit. Hazard damage uses the same path.
+
+Hazards, such as Clostridium's on-death spore, are level-owned and separate from
+the bacteria pool, so they do not affect `spawn_count`, `destroyed_count`, or wave
+resolution.
+
+At zero health, `.Game_Over` offers retry level or restart run. Retry re-initializes
+the current level from the run seed and level number; restart re-initializes from
+level 1 with the run seed. Both are full resets of health, projectiles, hazards,
+buffs, and the return roster.
 
 ## Level progression
 
@@ -247,6 +263,18 @@ all procedurally generated from a set of rules.
 For levels 1–2, entry is pinned to a single top-center point by passing a
 one-element list of available points to the entry generator. Later levels draw
 from the full set.
+
+## Background
+
+The play field sits over two vertically scrolling layers of 32×32 panels. Both
+are generated from the level seed: a per-level subset of panels, a per-tile
+orientation, and a sparse front layer. The back layer scrolls slowly and the
+front layer quickly, producing the parallax that implies forward motion. Panels
+animate through 3–4 frames.
+
+The backdrop is periodic, so scrolling wraps without a seam. It is presentation
+only; no gameplay decision reads it. Scroll and animation advance in the menu
+and during play, and freeze while paused or in the level transition.
 
 ## UI
 
