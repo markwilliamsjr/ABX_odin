@@ -87,6 +87,20 @@ the current level from the run seed and level number; restart re-initializes fro
 level 1 with the run seed. Both are full resets of health, projectiles, hazards,
 buffs, and the return roster.
 
+Health restores to 100% at each level start, through one permille constant. The
+restore runs at the level-start seam, so the frozen transition frame still shows
+the health the player finished with. The value is expected to become 50% if
+in-level healing is added.
+
+Once the Phase 7 shield node exists, the level-start order is: restore health,
+set current health to 1, fill the shield. The shield absorbs damage before health.
+It waits 2 seconds after any shield damage, then refills continuously at a flat
+points-per-second rate; delay-reduction nodes can take that wait to zero, making
+regeneration effectively continuous at full investment. The delay timer and regen
+advance only while `.Playing`. The shield draws as an overlay on the health bar
+with a combined health-plus-shield scale. Any future health packs or lifesteal are
+redirected to the shield at a reduced rate.
+
 ## Level progression
 
 A level ends when all of its waves are resolved. `Level_Transition` owns

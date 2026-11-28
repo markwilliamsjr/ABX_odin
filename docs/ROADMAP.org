@@ -48,6 +48,15 @@ Decide each before writing the code that depends on it.
       damage, mutual contact damage, a global invulnerability window, and a
       reachable game over offering retry level or restart run. See
       [[file:DECISIONS.md::Player survival and damage][Player survival and damage]].
+- [X] **Health restore policy** — resolved: restore 100% at each level start
+      while no in-level healing exists; revisit at 50% if health packs, lifesteal,
+      or another recovery source is added. See
+      [[file:DECISIONS.md::Health restore policy][Health restore policy]].
+- [X] **Regenerative shield node** — resolved and committed to Phase 7: health
+      drops to 1, shield fills to 60% of max health plus capacity nodes, flat
+      regen after a 2-second delay, delay nodes reaching zero as a capstone,
+      healing redirected to shield at a reduced rate, PoE-style HUD overlay. See
+      [[file:DECISIONS.md::Regenerative shield][Regenerative shield]].
 
 ** Phase 1 — Level and wave lifecycle (current)
 
@@ -378,8 +387,11 @@ Decision: [[file:DECISIONS.md::Player survival and damage][Player survival and d
 - [ ] Retry re-initializes the current level from the run seed and level number.
       Restart re-initializes from level 1 with the run seed. Both reset player
       health, bullets, hazards, and the return roster deliberately.
-- [ ] Decide and record whether health carries between levels or is restored on
-      advance; keep the policy in one place.
+- [ ] Restore 100% of health at each level start, before the next level's first
+      frame and before any shield conversion. Retry and restart use the same
+      seam. Link: [[file:DECISIONS.md::Health restore policy][Health restore policy]].
+- [ ] Keep the restore amount as one permille constant so the policy can change
+      to 50% without a code search.
 - [ ] Keep boss and hazard balance out of this phase; it only builds the damage
       path and the fail state.
 
@@ -439,6 +451,28 @@ Separate species identity from reusable gameplay behaviors.
 - [ ] Unlock weapons (PCN, PMX) through the tree; add the weapon-switching
       control. Player starts with Neutral only.
 - [ ] Grant active abilities and passive stat nodes.
+- [ ] Add the regenerative shield node. While active, every level start restores
+      health, sets current health to 1, and fills a shield to its maximum.
+      Decision: [[file:DECISIONS.md::Regenerative shield][Regenerative shield]].
+      - Baseline capacity is 60% of max health; capacity nodes add to it.
+      - The shield absorbs damage before health. The remainder hits health, so
+        overkill at 1 health is lethal.
+      - Regeneration waits 2 seconds after any shield damage; any hit resets the
+        timer, so sustained fire suppresses it. Once the delay elapses, the shield
+        refills continuously at a flat points/second rate. It advances only in
+        `.Playing`.
+      - Regeneration is flat, not a percentage of max shield. Capacity nodes make
+        the shield bigger but do not speed recovery.
+      - Delay-reduction nodes lower the wait, clamped at zero. At zero, regen
+        effectively becomes continuous as the fully invested end state.
+      - If health packs or lifesteal exist, healing redirects entirely to the
+        shield at a reduced multiplier; health stays at 1. Overheal is wasted.
+      - The HUD draws the shield as an overlay on the health bar, with a combined
+        health + shield scale.
+      - Respec restores health under the normal restore policy at the next level
+        start.
+- [ ] Keep health packs and lifesteal out of this phase; the healing redirect
+      stays dormant until one of those systems exists.
 - [ ] Tune weapon damage versus fire rate; PCN and PMX are placeholders until
       then.
 - [ ] Mount into the existing ~Level_Transition~ state.

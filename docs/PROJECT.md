@@ -127,6 +127,7 @@ Not yet implemented:
 - Per-species entry, hold, dive, and return behavior; the current non-Strep paths
   are placeholders (Phase 6). Frenzied does not yet affect their dive speeds.
 - Weapon switching and unlocks (Phase 7).
+- Regenerative shield node and its health-bar overlay (Phase 7).
 - Clay UI, settings, skill tree, bosses, and adaptive wave composition. The skill
   tree will replace the temporary timed transition hold.
 - A working no-vsync path and frame limiter.

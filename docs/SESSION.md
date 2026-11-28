@@ -2,6 +2,7 @@
 
 ## Date
 
+2026-11-28 (health restore policy and regenerative shield node decided)
 2026-11-26 (docs/tmp folded into the roadmap; Phase 3B scrolling background
 decided)
 2026-11-24 (Phase 2 steps 1–3 implemented; tick clock, transition and wave
@@ -60,6 +61,21 @@ Settled the near-term open items:
   fail state. Health bar with variable damage at the bottom-left; mutual contact
   damage; a global invulnerability window; reachable `.Game_Over` offering retry
   level or restart run. Clostridium's hazard depends on this path.
+
+## Decision pass (2026-11-28)
+
+- Health restores to 100% at each level start through one permille constant.
+  Cross-level attrition would only create a death spiral while nothing restores
+  health. Revisit at 50% if health packs, lifesteal, or another recovery source
+  is added.
+- The regenerative shield node is committed to Phase 7. It sets current health to
+  1 and fills a shield to 60% of max health plus capacity nodes at each level
+  start. Shield absorbs before health, and regenerates at a flat rate after a
+  2-second delay; any shield damage resets the delay. Delay nodes can reach zero,
+  making continuous regen a fully invested capstone. Future healing redirects to
+  the shield at a reduced multiplier. HUD is a PoE-style overlay with a combined
+  scale. Decisions: `DECISIONS.md` "Health restore policy" and "Regenerative
+  shield".
 
 ## Phase 2 progress (2026-11-24)
 
@@ -597,10 +613,13 @@ counts) and revert them, as in 1.6.
   not architecture.
 - Phase 3B's 20/60 px/s layer speeds, 4+4 per-level panel subset, 30–40% front
   occupancy, and 128-row period are first-pass tuning values, not architecture.
-- Phase 5B's maximum health, per-species contact damage, hazard damage,
-  invulnerability duration, and the health-restore policy between levels are
-  first-pass tuning values; the damage path and reset semantics are the
-  architecture.
+- Phase 5B's maximum health, per-species contact damage, hazard damage, and
+  invulnerability duration are first-pass tuning values; the damage path, the
+  100% restore seam, and reset semantics are architecture.
+- The shield's capacity nodes, flat regen rate, delay reduction, and
+  reduced-healing multiplier are first-pass tuning values. The level-start
+  conversion order, shield-first damage, the 2-second base delay, and state-gated
+  regen are architecture.
 - Species placement's preferred depths and relation weights are first-pass
   tuning values. The relation table is sparse and grows with the roster.
 - Weapon damage is a flat `3` for Neutral, PCN, and PMX; differentiation is

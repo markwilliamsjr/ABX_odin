@@ -1201,9 +1201,8 @@ player just lost.
 
 - `.Game_Over` becomes reachable; the state-machine decision and the state table
   in `ARCHITECTURE.md` must reflect it.
-- Player health lives on the player or world and survives level transitions
-  unless the restore policy says otherwise. Whether health restores on level
-  advance is a tuning choice; the policy must live in one place.
+- Player health survives level transitions only until the restore policy runs.
+  See "Health restore policy"; the policy is settled and lives at one seam.
 - Retry and restart are separate reset paths. Each must reset the return roster,
   bullets, hazards, buffs, and world timers; a partial reset is a bug.
 - The Phase 4A debug restart reuses the retry path; debug advance reuses the
@@ -1212,6 +1211,116 @@ player just lost.
   tuning constants, not architecture.
 - Hazards are level-owned and damage through this path; they do not enter the
   bacteria pool or change wave accounting.
+
+## Health restore policy
+
+### Decision
+
+Player health restores to 100% at each level start. The restore runs at the
+level-start seam: after the previous level's final damage, before the next
+level's first frame, and before any shield conversion. Retry and restart restore
+full health through the same seam.
+
+The restore amount is one constant, `HEALTH_RESTORE_PERMILLE = 1000`, so changing
+the policy does not scatter magic numbers through the level and player code.
+
+Revisit trigger, not a decision: if health packs, lifesteal, or another in-level
+recovery source is added, replace the 100% restore with 50%. At that point health
+becomes a resource carried between levels rather than a per-level fail counter.
+
+### Reason
+
+While nothing can restore health, cross-level attrition would only create a death
+spiral: one bad level would make every later level harder with no way to recover.
+A full restore makes each level independently playable and makes damage tuning
+per-level. Expressing the value in permille matches the project's damage and buff
+convention and makes the later 50% change a one-line edit.
+
+### Consequences
+
+- The restore happens after the transition's frozen frame, so the transition
+  shows the health the player actually finished with; the next level begins full.
+- Max-health upgrades restore to the new maximum.
+- The regenerative shield's level-start conversion runs after this restore; the
+  two orderings must not be swapped.
+- The 50% value is deliberately not recorded as the current policy. It is the
+  expected replacement once in-level healing exists.
+- If health is restored at the level-start seam, retry and advance cannot diverge
+  in health behavior.
+
+## Regenerative shield
+
+### Decision
+
+A Phase 7 skill-tree node converts health into a regenerating shield while it is
+active. Every level start runs, in order: full health restore, current health set
+to 1, shield filled to its maximum.
+
+Baseline shield capacity is 60% of max health. Capacity nodes add to that
+baseline, so max-health upgrades raise the 60% portion and capacity nodes raise it
+further. The shield starts full at every level, including retry and restart.
+
+The shield absorbs damage before health. The remainder hits health; with 1 health,
+any overkill is lethal.
+
+Regeneration waits 2 seconds after the most recent shield damage. Any hit that
+reaches the shield resets the timer, so sustained fire suppresses regeneration
+entirely. Once the delay elapses, the shield refills continuously until full. The
+rate is flat shield points per second; there is no percentage component.
+
+Regeneration and the delay timer advance only while the game is in `.Playing`.
+Delay-reduction nodes can lower the wait, clamped at zero. At zero delay a hit
+resets the timer to zero and regeneration effectively becomes continuous; that is
+the fully invested end state, not the baseline.
+
+If health packs or lifesteal exist, healing is redirected entirely to the shield
+at a reduced multiplier while the node is active. Health stays at 1. Overheal at a
+full shield is wasted.
+
+The HUD draws the shield as an overlay on the health bar, PoE-style. Because
+capacity nodes can push the shield past the 60% baseline, the bar's scale covers
+health plus shield rather than health alone.
+
+### Reason
+
+The node trades raw health for recovery: avoided damage is cheap, sustained
+damage suppresses the shield, and burst damage is lethal. That is a distinct build
+identity rather than a straight upgrade. Starting the shield full each level makes
+the node consistent with the level-start health restore and avoids a first-hit
+death.
+
+The two-second delay makes the node about breaking contact and recovering, not
+tanking under fire. Flat regeneration keeps each node's contribution legible and
+avoids capacity nodes quietly improving recovery through a percentage term. With
+no item system, the skill tree is also the only source of regen values, so a flat
+number per node is easier to tune and explain than a percentage of a changing
+shield maximum. It keeps capacity and regen separate: a larger shield takes longer
+to refill at the same flat rate. Letting delay nodes reach zero gives the tree a
+capstone without making continuous regeneration the starting behavior.
+
+Redirecting healing keeps the 1-health drawback intact. If packs and lifesteal
+healed health normally, the first pickup would erase the node's identity.
+
+### Consequences
+
+- Removing or respeccing the node must restore health under the normal restore
+  policy at the next level start. The respec path belongs to Phase 7.
+- Capacity, flat regen rate, delay reduction, and the healing multiplier are
+  tuning constants. The rules above are architecture.
+- Capacity does not improve regeneration. A larger shield refills more slowly at
+  the same flat rate, which is the intended tradeoff for capacity nodes.
+- The shield uses the same damage path as contact and hazards, so every damage
+  source gets the shield-first rule for free.
+- Shield regeneration and its delay timer are state-gated: neither advances while
+  paused or during `.Level_Transition`.
+- Health packs and lifesteal are not committed by this decision. The redirect is
+  the rule that applies if they are added.
+- The 50% health-restore revisit trigger still applies to builds without the node.
+- Balance risk: at zero delay with heavy capacity and regen investment, the build
+  becomes continuous regeneration. That is the intended capstone; node cost and
+  the flat values are the limiters, not hidden rules.
+- The debug overlay's player section should show health and shield once the node
+  exists.
 
 ## State machine
 
